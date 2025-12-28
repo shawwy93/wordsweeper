@@ -1280,6 +1280,16 @@ body.gameBackground {
   margin-bottom: 4px;
 }
 
+.musicRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.musicSlider {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
 .modalOverlay {
   position: fixed;
   inset: 0;
