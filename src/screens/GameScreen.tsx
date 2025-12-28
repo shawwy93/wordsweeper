@@ -11,6 +11,12 @@ import { validateMove, type WordPlay } from "../game/validation";
 import { recordGameResult, recordGameStart, recordMoveStats } from "../game/stats";
 import tileBase from "../assets/tile-base.png";
 
+import placeAudioSrc from "../assets/audio/placeAudio.mp3";
+import shuffleAudioSrc from "../assets/audio/shuffleAudio.mp3";
+import buttonAudioSrc from "../assets/audio/buttonAudio.mp3";
+import loseAudioSrc from "../assets/audio/loseAudio.mp3";
+import winAudioSrc from "../assets/audio/winAudio.mp3";
+
 const TOTAL_TILES = createTileBag().length;
 const AI_DELAY_MS = 650;
 const TOUCH_DRAG_THRESHOLD = 6;
@@ -57,6 +63,7 @@ type BlankPick = {
   tileId: string;
   x: number;
   y: number;
+  swapTargetId?: string;
 };
 
 type TouchDrag = {
@@ -330,6 +337,61 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
   const passStreakRef = useRef<PassStreak>(passStreak);
   const gameOverRef = useRef(gameOver);
 
+  const audioRef = useRef<{
+    place: HTMLAudioElement;
+    shuffle: HTMLAudioElement;
+    button: HTMLAudioElement;
+    win: HTMLAudioElement;
+    lose: HTMLAudioElement;
+  } | null>(null);
+
+  if (!audioRef.current) {
+    audioRef.current = {
+      place: new Audio(placeAudioSrc),
+      shuffle: new Audio(shuffleAudioSrc),
+      button: new Audio(buttonAudioSrc),
+      win: new Audio(winAudioSrc),
+      lose: new Audio(loseAudioSrc),
+    };
+    Object.values(audioRef.current).forEach((audio) => {
+      audio.preload = "auto";
+    });
+  }
+
+  function playSound(audio?: HTMLAudioElement) {
+    if (!audio) return;
+    try {
+      audio.currentTime = 0;
+      const result = audio.play();
+      if (result && typeof result.catch === "function") {
+        result.catch(() => undefined);
+      }
+    } catch {
+      return;
+    }
+  }
+
+  function playPlaceSound() {
+    playSound(audioRef.current?.place);
+  }
+
+  function playShuffleSound() {
+    playSound(audioRef.current?.shuffle);
+  }
+
+  function playButtonSound() {
+    playSound(audioRef.current?.button);
+  }
+
+
+  function playWinSound() {
+    playSound(audioRef.current?.win);
+  }
+
+  function playLoseSound() {
+    playSound(audioRef.current?.lose);
+  }
+
   useEffect(() => {
     document.body.classList.add("gameBackground");
     return () => document.body.classList.remove("gameBackground");
@@ -514,6 +576,8 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
 
   function handleGameOver(nextGame: GameState, reason: string, stats: MatchStats, winner?: "You" | "AI" | "Tie") {
     const finalWinner = winner ?? computeWinner(nextGame.scores);
+    if (finalWinner === "You") playWinSound();
+    if (finalWinner === "AI") playLoseSound();
     setGameOver({
       winner: finalWinner,
       reason,
@@ -576,6 +640,80 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
     });
   }
 
+  function swapRackWithPlaced(
+    rackTileId: string,
+    targetTileId: string,
+    x: number,
+    y: number,
+    letterOverride?: string
+  ) {
+    let didSwap = false;
+    setGame((g) => {
+      const rackIndex = g.rack.findIndex((t) => t.id === rackTileId);
+      const targetPlaced = g.placedThisTurn.find((p) => p.tileId === targetTileId);
+      if (rackIndex === -1 || !targetPlaced) return g;
+      const targetCell = g.board[y]?.[x];
+      if (!targetCell || targetCell.tileId !== targetTileId) return g;
+
+      const newBoard = g.board.map((row) => row.map((c) => ({ ...c })));
+      const newRack = [...g.rack];
+      const rackTile = newRack[rackIndex];
+      newRack[rackIndex] = g.tilesById[targetTileId];
+
+      const targetCellCopy = newBoard[y][x];
+      targetCellCopy.tileId = rackTileId;
+      targetCellCopy.letterOverride = letterOverride;
+
+      const newPlaced = g.placedThisTurn.map((p) =>
+        p.tileId === targetTileId ? { ...p, tileId: rackTileId, x, y } : p
+      );
+
+      didSwap = true;
+      return {
+        ...g,
+        board: newBoard,
+        rack: newRack,
+        placedThisTurn: newPlaced,
+      };
+    });
+    if (didSwap) playPlaceSound();
+  }
+
+
+  function swapPlacedTiles(sourceId: string, targetId: string) {
+    if (!canInteract) return;
+    if (sourceId === targetId) return;
+    let didSwap = false;
+    setGame((g) => {
+      const sourcePlaced = g.placedThisTurn.find((p) => p.tileId === sourceId);
+      const targetPlaced = g.placedThisTurn.find((p) => p.tileId === targetId);
+      if (!sourcePlaced || !targetPlaced) return g;
+
+      const newBoard = g.board.map((row) => row.map((c) => ({ ...c })));
+      const sourceCell = newBoard[sourcePlaced.y]?.[sourcePlaced.x];
+      const targetCell = newBoard[targetPlaced.y]?.[targetPlaced.x];
+      if (!sourceCell || !targetCell) return g;
+
+      const sourceOverride = sourceCell.letterOverride;
+      const targetOverride = targetCell.letterOverride;
+
+      sourceCell.tileId = targetId;
+      sourceCell.letterOverride = targetOverride;
+      targetCell.tileId = sourceId;
+      targetCell.letterOverride = sourceOverride;
+
+      const newPlaced = g.placedThisTurn.map((p) => {
+        if (p.tileId === sourceId) return { ...p, x: targetPlaced.x, y: targetPlaced.y };
+        if (p.tileId === targetId) return { ...p, x: sourcePlaced.x, y: sourcePlaced.y };
+        return p;
+      });
+
+      didSwap = true;
+      return { ...g, board: newBoard, placedThisTurn: newPlaced };
+    });
+    if (didSwap) playPlaceSound();
+  }
+
   function beginTouchDrag(
     tileId: string,
     source: "rack" | "board",
@@ -617,7 +755,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
       const x = Number(boardCell.dataset.boardX);
       const y = Number(boardCell.dataset.boardY);
       if (!Number.isNaN(x) && !Number.isNaN(y)) {
-        placeTileAt(tileId, x, y);
+        onBoardDrop(tileId, source, x, y);
         return;
       }
     }
@@ -637,6 +775,47 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
     }
   }
 
+  function handleExit() {
+    playButtonSound();
+    props.onExit();
+  }
+
+  function openHistory() {
+    playButtonSound();
+    setShowHistory(true);
+  }
+
+  function closeHistory() {
+    playButtonSound();
+    setShowHistory(false);
+  }
+
+  function openMoreMenu() {
+    playButtonSound();
+    setShowMoreMenu(true);
+  }
+
+  function closeMoreMenu() {
+    playButtonSound();
+    setShowMoreMenu(false);
+  }
+
+  function toggleHiddenHints() {
+    if (!canInteract) return;
+    playButtonSound();
+    setShowHiddenHints((v) => !v);
+  }
+
+  function closePlayModal() {
+    playButtonSound();
+    setPlayModal(null);
+  }
+
+  function closeBlankPicker() {
+    playButtonSound();
+    setBlankPicker(null);
+  }
+
   function onSelectRackTile(tileId: string) {
     if (!canInteract) return;
     setSelectedTileId((prev) => (prev === tileId ? null : tileId));
@@ -645,6 +824,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
   function placeTileAt(tileId: string, x: number, y: number, letterOverride?: string) {
     if (!canInteract) return;
     const tileMeta = game.tilesById[tileId];
+    let didPlace = false;
     const alreadyPlaced = game.placedThisTurn.find((p) => p.tileId === tileId);
     if (tileMeta?.isBlank && !alreadyPlaced && !letterOverride) {
       setBlankPicker({ tileId, x, y });
@@ -668,6 +848,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
         const newPlaced = g.placedThisTurn.map((p) =>
           p.tileId === tileId ? { ...p, x, y } : p
         );
+        didPlace = true;
         return {
           ...g,
           board: newBoard,
@@ -686,6 +867,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
       const newRack = g.rack.filter((t) => t.id !== tile.id);
       const newPlaced: PlacedTile[] = [...g.placedThisTurn, { tileId: tile.id, x, y }];
 
+      didPlace = true;
       return {
         ...g,
         board: newBoard,
@@ -694,6 +876,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
       };
     });
 
+    if (didPlace) playPlaceSound();
     setSelectedTileId(null);
   }
 
@@ -732,9 +915,36 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
     }
   }
 
-  function onBoardDrop(tileId: string, _source: "rack" | "board", x: number, y: number) {
+  function onBoardDrop(tileId: string, source: "rack" | "board", x: number, y: number) {
     if (!canInteract) return;
-    placeTileAt(tileId, x, y);
+    const current = gameRef.current;
+    if (!current) return;
+    const cell = current.board[y]?.[x];
+    if (!cell) return;
+
+    if (!cell.tileId) {
+      placeTileAt(tileId, x, y);
+      return;
+    }
+
+    const targetId = cell.tileId;
+    const targetPlaced = current.placedThisTurn.find((p) => p.tileId === targetId);
+    if (!targetPlaced) return;
+
+    if (source === "board") {
+      const sourcePlaced = current.placedThisTurn.find((p) => p.tileId === tileId);
+      if (!sourcePlaced) return;
+      swapPlacedTiles(tileId, targetId);
+      return;
+    }
+
+    const rackTile = current.rack.find((t) => t.id === tileId);
+    if (rackTile?.isBlank) {
+      setBlankPicker({ tileId, x, y, swapTargetId: targetId });
+      setSelectedTileId(null);
+      return;
+    }
+    swapRackWithPlaced(tileId, targetId, x, y);
   }
 
   function onTapSquare(x: number, y: number) {
@@ -745,14 +955,20 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
 
   function confirmBlankLetter(letter: string) {
     if (!blankPicker) return;
-    const { tileId, x, y } = blankPicker;
+    playButtonSound();
+    const { tileId, x, y, swapTargetId } = blankPicker;
     setBlankPicker(null);
-    placeTileAt(tileId, x, y, letter);
+    if (swapTargetId) {
+      swapRackWithPlaced(tileId, swapTargetId, x, y, letter);
+    } else {
+      placeTileAt(tileId, x, y, letter);
+    }
     setSelectedTileId(null);
   }
 
   function undo() {
     if (!canInteract) return;
+    playButtonSound();
     setGame((g) => {
       if (g.placedThisTurn.length === 0) return g;
       const last = g.placedThisTurn[g.placedThisTurn.length - 1];
@@ -775,12 +991,15 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
 
   function recallTurn() {
     if (!canInteract) return;
+    playButtonSound();
     setGame((g) => clearPlayerPlacements(g));
     setSelectedTileId(null);
   }
 
   function shuffleRack() {
     if (!canInteract) return;
+    playButtonSound();
+    playShuffleSound();
     setGame((g) => ({
       ...g,
       rack: shuffle(g.rack),
@@ -789,6 +1008,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
 
   function swapRack() {
     if (!canSwap) return;
+    playButtonSound();
     const current = gameRef.current;
     if (!current) return;
     const selectedId = selectedTileId;
@@ -953,6 +1173,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
   }
 
   function commitTurn(words: WordPlay[], points: number) {
+    playButtonSound();
     const current = gameRef.current;
     if (!current) return;
     recordMoveStats({
@@ -993,6 +1214,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
 
   function passTurn() {
     if (!canInteract) return;
+    playButtonSound();
     const current = gameRef.current;
     if (!current) return;
     const nextGame = clearPlayerPlacements(current);
@@ -1010,6 +1232,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
 
   function resignGame() {
     if (gameOver) return;
+    playButtonSound();
     const current = gameRef.current;
     if (!current) return;
     setPlayModal(null);
@@ -1018,6 +1241,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
   }
 
   function newMatch() {
+    playButtonSound();
     setSelectedTileId(null);
     setShowHiddenHints(false);
     setTurn(1);
@@ -1048,11 +1272,11 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
       <div className="gameShell desktopShell">
         <aside className="leftRail">
           <div className="leftNav">
-            <button className="navItem" type="button" onClick={props.onExit} aria-label="Home">
+            <button className="navItem" type="button" onClick={handleExit} aria-label="Home">
               <IconMenu />
               <span>Home</span>
             </button>
-            <button className="navItem" type="button" aria-label="Moves" onClick={() => setShowHistory(true)}>
+            <button className="navItem" type="button" aria-label="Moves" onClick={openHistory}>
               <IconUser />
               <span>Moves</span>
             </button>
@@ -1094,7 +1318,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
               <IconButton label="Resign" onClick={resignGame} className="iconDanger">
                 <IconPass />
               </IconButton>
-              <IconButton label="Exit to Home" onClick={props.onExit} className="iconDanger">
+              <IconButton label="Exit to Home" onClick={handleExit} className="iconDanger">
                 <IconMenu />
               </IconButton>
             </div>
@@ -1132,7 +1356,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
                 <button
                   type="button"
                   className={"chip " + (showHiddenHints ? "chipActive" : "")}
-                  onClick={() => setShowHiddenHints((v) => !v)}
+                  onClick={toggleHiddenHints}
                   disabled={!canInteract}
                 >
                   {showHiddenHints ? "Hide hidden tiles" : "Highlight hidden tiles"}
@@ -1163,7 +1387,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
               <button
                 className="iconButton compact"
                 type="button"
-                onClick={props.onExit}
+                onClick={handleExit}
                 aria-label="Home"
               >
                 <span className="iconGlyph"><IconMenu /></span>
@@ -1250,7 +1474,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
       </div>
       <div className="mobileShell">
         <div className="mobileTopBar">
-          <button className="mobileIconButton" type="button" onClick={props.onExit} aria-label="Home">
+          <button className="mobileIconButton" type="button" onClick={handleExit} aria-label="Home">
             <span className="iconGlyph"><IconBack /></span>
           </button>
 
@@ -1278,7 +1502,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
           <button
             className="mobileHistoryButton"
             type="button"
-            onClick={() => setShowHistory(true)}
+            onClick={openHistory}
             aria-label="Moves"
           >
             <span className="iconGlyph"><IconHistory /></span>
@@ -1319,7 +1543,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
         </div>
 
         <div className="mobileActionBar">
-          <button className="actionButton" type="button" onClick={() => setShowMoreMenu(true)} aria-label="More">
+          <button className="actionButton" type="button" onClick={openMoreMenu} aria-label="More">
             <span className="iconGlyph"><IconMenu /></span>
             <span className="iconLabel">More</span>
           </button>
@@ -1396,7 +1620,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
                 </button>
               ))}
             </div>
-            <button type="button" className="blankCancel" onClick={() => setBlankPicker(null)}>
+            <button type="button" className="blankCancel" onClick={closeBlankPicker}>
               Cancel
             </button>
           </div>
@@ -1439,7 +1663,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
               <button type="button" className="confirmBtn primary" onClick={newMatch}>
                 Play Again
               </button>
-              <button type="button" className="confirmBtn" onClick={props.onExit}>
+              <button type="button" className="confirmBtn" onClick={handleExit}>
                 Home
               </button>
             </div>
@@ -1455,7 +1679,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
               <button
                 type="button"
                 className="historyClose"
-                onClick={() => setShowHistory(false)}
+                onClick={closeHistory}
                 aria-label="Close moves"
               >
                 Close
@@ -1493,12 +1717,12 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
           <div className="moreCard" onClick={(event) => event.stopPropagation()}>
             <div className="moreHeader">
               <div>More</div>
-              <button className="iconButton tiny" type="button" onClick={() => setShowMoreMenu(false)} aria-label="Close">
+              <button className="iconButton tiny" type="button" onClick={closeMoreMenu} aria-label="Close">
                 <span className="iconGlyph">X</span>
               </button>
             </div>
             <div className="moreSection">
-              <button className="moreActionButton" type="button" onClick={props.onExit}>
+              <button className="moreActionButton" type="button" onClick={handleExit}>
                 Home
               </button>
               <button className="moreActionButton danger" type="button" onClick={resignGame}>
@@ -1525,7 +1749,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
                   <button
                     type="button"
                     className="confirmBtn ghost"
-                    onClick={() => setPlayModal(null)}
+                    onClick={closePlayModal}
                   >
                     No
                   </button>
@@ -1553,7 +1777,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
                   <button
                     type="button"
                     className="confirmBtn primary"
-                    onClick={() => setPlayModal(null)}
+                    onClick={closePlayModal}
                   >
                     Back
                   </button>
