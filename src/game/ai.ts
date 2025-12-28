@@ -12,6 +12,8 @@ export type AiMove = {
   placements: PlacedTile[];
   words: WordPlay[];
   score: number;
+  maxWordLength: number;
+  tileCount: number;
 };
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -203,20 +205,66 @@ function simulatePlacement(g: GameState, placements: PlacedTile[]) {
   };
 }
 
-function pushCandidate(
-  list: AiMove[],
-  move: AiMove,
-  limit: number
-) {
-  list.push(move);
-  list.sort((a, b) => b.score - a.score);
-  if (list.length > limit) list.length = limit;
+function shuffleInPlace<T>(arr: T[]) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function maxWordLength(words: WordPlay[]) {
+  let max = 0;
+  for (const word of words) {
+    if (word.text.length > max) max = word.text.length;
+  }
+  return max;
+}
+
+function isBetterHard(candidate: AiMove, current: AiMove | null) {
+  if (!current) return true;
+  if (candidate.score !== current.score) return candidate.score > current.score;
+  return candidate.maxWordLength > current.maxWordLength;
+}
+
+function chooseNormal(moves: AiMove[]) {
+  const sorted = [...moves].sort((a, b) => b.score - a.score);
+  const top = sorted.slice(0, Math.min(sorted.length, 8));
+  const medium = top.filter((move) => move.maxWordLength >= 4 && move.maxWordLength <= 6);
+  let pickFrom = medium.length > 0 ? medium : top;
+  if (pickFrom.length > 1 && Math.random() < 0.35) {
+    pickFrom = pickFrom.slice(1);
+  }
+  return pickFrom[Math.floor(Math.random() * pickFrom.length)];
+}
+
+function chooseEasy(moves: AiMove[]) {
+  const sorted = [...moves].sort((a, b) => b.score - a.score);
+  const short = sorted.filter((move) => move.maxWordLength <= 4);
+  const base = short.length > 0 ? short : sorted;
+  const cap = Math.min(base.length, 10);
+  let pickFrom = base.slice(0, cap);
+  if (pickFrom.length > 2) {
+    const start = Math.floor(pickFrom.length * 0.4);
+    pickFrom = pickFrom.slice(start);
+  }
+  if (Math.random() < 0.25) {
+    pickFrom = base;
+  }
+  return pickFrom[Math.floor(Math.random() * pickFrom.length)];
 }
 
 export function chooseAiMove(g: GameState): AiMove | null {
   if (g.aiRack.length === 0) return null;
 
-  const anchors = getAnchors(g);
+  let anchors = getAnchors(g);
+  if (g.difficulty !== "hard") {
+    anchors = shuffleInPlace(anchors);
+  }
+  const anchorLimit =
+    g.difficulty === "hard" ? anchors.length : g.difficulty === "normal" ? 24 : 14;
+  anchors = anchors.slice(0, Math.min(anchorLimit, anchors.length));
+
   const rackCounts: Record<string, number> = {};
   const rackIds: Record<string, string[]> = {};
   const blankIds: string[] = [];
@@ -234,10 +282,20 @@ export function chooseAiMove(g: GameState): AiMove | null {
 
   let best: AiMove | null = null;
   const candidates: AiMove[] = [];
+  const keepCandidates = g.difficulty !== "hard";
   const size = g.board.length;
+  const maxEvaluations =
+    g.difficulty === "hard" ? Number.POSITIVE_INFINITY : g.difficulty === "normal" ? 700 : 250;
+  let evalCount = 0;
+  let reachedLimit = false;
 
   function evaluatePlacements(placements: PlacedTile[]) {
-    if (placements.length === 0) return;
+    if (placements.length === 0 || reachedLimit) return;
+    evalCount += 1;
+    if (evalCount > maxEvaluations) {
+      reachedLimit = true;
+      return;
+    }
     const sim = simulatePlacement(g, placements);
     if (!sim) return;
     const result = validateMove(sim);
@@ -247,9 +305,11 @@ export function chooseAiMove(g: GameState): AiMove | null {
       placements: placements.map((p) => ({ ...p })),
       words: result.words,
       score,
+      maxWordLength: maxWordLength(result.words),
+      tileCount: placements.length,
     };
-    if (!best || score > best.score) best = move;
-    pushCandidate(candidates, move, 16);
+    if (isBetterHard(move, best)) best = move;
+    if (keepCandidates) candidates.push(move);
   }
 
   function searchLine(anchor: { x: number; y: number }, horizontal: boolean) {
@@ -267,7 +327,7 @@ export function chooseAiMove(g: GameState): AiMove | null {
       anchorIncluded: boolean,
       placedCount: number
     ) {
-      if (pos >= size) return;
+      if (reachedLimit || pos >= size) return;
 
       const { x, y } = coordAt(pos);
       const cell = g.board[y][x];
@@ -292,6 +352,7 @@ export function chooseAiMove(g: GameState): AiMove | null {
       const allowed = crossCheckLetters(g, x, y, horizontal, crossCache);
 
       for (const letter of rackLetters) {
+        if (reachedLimit) return;
         if (rackCounts[letter] <= 0) continue;
         if (allowed && !allowed.has(letter)) continue;
         const nextNode = node.children[letter];
@@ -322,6 +383,7 @@ export function chooseAiMove(g: GameState): AiMove | null {
 
       if (blankIds.length > 0) {
         for (const letter of ALPHABET) {
+          if (reachedLimit) return;
           if (allowed && !allowed.has(letter)) continue;
           const nextNode = node.children[letter];
           if (!nextNode) continue;
@@ -350,6 +412,7 @@ export function chooseAiMove(g: GameState): AiMove | null {
     }
 
     for (let start = 0; start <= anchorPos; start++) {
+      if (reachedLimit) break;
       if (start > 0) {
         const prev = coordAt(start - 1);
         if (tileIdAt(g, prev.x, prev.y)) continue;
@@ -359,14 +422,13 @@ export function chooseAiMove(g: GameState): AiMove | null {
   }
 
   for (const anchor of anchors) {
+    if (reachedLimit) break;
     searchLine(anchor, true);
     searchLine(anchor, false);
   }
 
   if (!best) return null;
-  if (g.difficulty === "easy") {
-    const pool = candidates.length > 0 ? candidates : [best];
-    return pool[Math.floor(Math.random() * pool.length)];
-  }
-  return best;
+  if (g.difficulty === "hard") return best;
+  const pool = candidates.length > 0 ? candidates : [best];
+  return g.difficulty === "easy" ? chooseEasy(pool) : chooseNormal(pool);
 }

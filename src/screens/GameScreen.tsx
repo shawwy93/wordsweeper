@@ -311,7 +311,7 @@ function clearPlayerPlacements(g: GameState) {
   };
 }
 
-export default function GameScreen(props: { difficulty: Difficulty; onExit: () => void }) {
+export default function GameScreen(props: { difficulty: Difficulty; audio: { ui: boolean; game: boolean }; onExit: () => void }) {
   const [game, setGame] = useState(() => createNewGame(props.difficulty));
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [showHiddenHints, setShowHiddenHints] = useState(false);
@@ -358,8 +358,10 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
     });
   }
 
-  function playSound(audio?: HTMLAudioElement) {
+  function playSound(audio: HTMLAudioElement | undefined, channel: "ui" | "game") {
     if (!audio) return;
+    if (channel === "ui" && !props.audio.ui) return;
+    if (channel === "game" && !props.audio.game) return;
     try {
       audio.currentTime = 0;
       const result = audio.play();
@@ -372,24 +374,23 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
   }
 
   function playPlaceSound() {
-    playSound(audioRef.current?.place);
+    playSound(audioRef.current?.place, "game");
   }
 
   function playShuffleSound() {
-    playSound(audioRef.current?.shuffle);
+    playSound(audioRef.current?.shuffle, "game");
   }
 
   function playButtonSound() {
-    playSound(audioRef.current?.button);
+    playSound(audioRef.current?.button, "ui");
   }
 
-
   function playWinSound() {
-    playSound(audioRef.current?.win);
+    playSound(audioRef.current?.win, "game");
   }
 
   function playLoseSound() {
-    playSound(audioRef.current?.lose);
+    playSound(audioRef.current?.lose, "game");
   }
 
   useEffect(() => {
@@ -1489,6 +1490,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
             <div className="mobileTurnInfo">
               <div className="mobileTurnLabel">{isPlayerTurn ? "Your turn" : "AI thinking"}</div>
               <div className="mobileTurnCount">Turn {turn}</div>
+              <div className="mobileDifficulty">{props.difficulty.toUpperCase()}</div>
             </div>
             <div className="mobilePlayerBlock ai">
               <div className="mobileAvatar ai">AI</div>

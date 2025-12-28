@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { Difficulty } from "../game/types";
 import buttonAudioSrc from "../assets/audio/buttonAudio.mp3";
 import playAudioSrc from "../assets/audio/playAudio.mp3";
@@ -10,7 +10,9 @@ export default function MenuScreen(props: {
   onStats: () => void;
   difficulty: Difficulty;
   setDifficulty: (d: Difficulty) => void;
+  audio: { ui: boolean; game: boolean };
 }) {
+  const [showDifficulty, setShowDifficulty] = useState(false);
   const audioRef = useRef<{
     play: HTMLAudioElement;
     button: HTMLAudioElement;
@@ -27,7 +29,7 @@ export default function MenuScreen(props: {
   }
 
   function playSound(audio?: HTMLAudioElement) {
-    if (!audio) return;
+    if (!audio || !props.audio.ui) return;
     try {
       audio.currentTime = 0;
       const result = audio.play();
@@ -47,9 +49,21 @@ export default function MenuScreen(props: {
     playSound(audioRef.current?.button);
   }
 
-  function handlePlay() {
+  function handlePlayClick() {
     playPlaySound();
+    setShowDifficulty(true);
+  }
+
+  function handlePick(d: Difficulty) {
+    playButtonSound();
+    props.setDifficulty(d);
+    setShowDifficulty(false);
     props.onPlay();
+  }
+
+  function handleClosePicker() {
+    playButtonSound();
+    setShowDifficulty(false);
   }
 
   function handleStats() {
@@ -67,7 +81,7 @@ export default function MenuScreen(props: {
       <div className="menuLayout">
         <div className="menuHeaderSpacer" aria-hidden="true" />
         <div className="menuStack">
-          <button className="menuAction primary" type="button" onClick={handlePlay}>
+          <button className="menuAction primary" type="button" onClick={handlePlayClick}>
             Play
           </button>
           <div className="menuSecondary">
@@ -80,6 +94,40 @@ export default function MenuScreen(props: {
           </div>
         </div>
       </div>
+
+      {showDifficulty && (
+        <div className="difficultyOverlay" onClick={handleClosePicker}>
+          <div className="difficultyCard" onClick={(event) => event.stopPropagation()}>
+            <div className="difficultyTitle">Choose difficulty</div>
+            <div className="difficultyButtons">
+              <button
+                type="button"
+                className={"difficultyOption" + (props.difficulty === "easy" ? " selected" : "")}
+                onClick={() => handlePick("easy")}
+              >
+                Easy
+              </button>
+              <button
+                type="button"
+                className={"difficultyOption" + (props.difficulty === "normal" ? " selected" : "")}
+                onClick={() => handlePick("normal")}
+              >
+                Normal
+              </button>
+              <button
+                type="button"
+                className={"difficultyOption" + (props.difficulty === "hard" ? " selected" : "")}
+                onClick={() => handlePick("hard")}
+              >
+                Hard
+              </button>
+            </div>
+            <button type="button" className="difficultyCancel" onClick={handleClosePicker}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

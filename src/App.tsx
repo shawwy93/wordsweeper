@@ -7,6 +7,7 @@ import StatsScreen from "./screens/StatsScreen";
 import { Difficulty } from "./game/types";
 
 type Screen = "menu" | "game" | "how" | "settings" | "stats";
+type AudioSettings = { ui: boolean; game: boolean };
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>(() => {
@@ -18,6 +19,14 @@ export default function App() {
     if (raw === "easy" || raw === "normal" || raw === "hard") return raw;
     return "normal";
   });
+  const [audioSettings, setAudioSettings] = useState<AudioSettings>(() => {
+    const ui = localStorage.getItem("hh_audio_ui");
+    const game = localStorage.getItem("hh_audio_game");
+    return {
+      ui: ui !== "0",
+      game: game !== "0",
+    };
+  });
 
   const settings = useMemo(
     () => ({
@@ -26,8 +35,14 @@ export default function App() {
         setDifficulty(d);
         localStorage.setItem("hh_difficulty", d);
       },
+      audio: audioSettings,
+      setAudio: (next: AudioSettings) => {
+        setAudioSettings(next);
+        localStorage.setItem("hh_audio_ui", next.ui ? "1" : "0");
+        localStorage.setItem("hh_audio_game", next.game ? "1" : "0");
+      },
     }),
-    [difficulty]
+    [difficulty, audioSettings]
   );
 
   return (
@@ -40,12 +55,14 @@ export default function App() {
           onStats={() => setScreen("stats")}
           difficulty={settings.difficulty}
           setDifficulty={settings.setDifficulty}
+          audio={settings.audio}
         />
       )}
 
       {screen === "game" && (
         <GameScreen
           difficulty={settings.difficulty}
+          audio={settings.audio}
           onExit={() => setScreen("menu")}
         />
       )}
@@ -63,6 +80,8 @@ export default function App() {
         <SettingsScreen
           difficulty={settings.difficulty}
           setDifficulty={settings.setDifficulty}
+          audio={settings.audio}
+          setAudio={settings.setAudio}
           onBack={() => setScreen("menu")}
         />
       )}
