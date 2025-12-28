@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import Board from "../components/Board";
 import Rack from "../components/Rack";
 import ScorePanel from "../components/ScorePanel";
@@ -13,6 +13,7 @@ import tileBase from "../assets/tile-base.png";
 
 const TOTAL_TILES = createTileBag().length;
 const AI_DELAY_MS = 650;
+const TOUCH_DRAG_THRESHOLD = 6;
 const MAX_SWAPS = 3;
 
 type PlayModalState =
@@ -56,6 +57,29 @@ type BlankPick = {
   tileId: string;
   x: number;
   y: number;
+};
+
+type TouchDrag = {
+  tileId: string;
+  source: "rack" | "board";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type PendingTouchDrag = {
+  tileId: string;
+  source: "rack" | "board";
+  pointerId: number;
+  startX: number;
+  startY: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+  element: HTMLElement;
+  started: boolean;
 };
 
 const BLANK_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -295,8 +319,10 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
   const [gameOver, setGameOver] = useState<GameOverState | null>(null);
   const [scorelessTurns, setScorelessTurns] = useState(0);
   const [matchStats, setMatchStats] = useState<MatchStats>({ ...EMPTY_MATCH_STATS });
+  const [touchDrag, setTouchDrag] = useState<TouchDrag | null>(null);
   const [passStreak, setPassStreak] = useState<PassStreak>({ ...EMPTY_PASS_STREAK });
   const [swapsUsed, setSwapsUsed] = useState(0);
+  const pendingTouchRef = useRef<PendingTouchDrag | null>(null);
   const aiQueuedRef = useRef(false);
   const gameRef = useRef<GameState>(game);
   const matchStatsRef = useRef<MatchStats>(matchStats);
@@ -333,6 +359,52 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
     gameOverRef.current = gameOver;
   }, [gameOver]);
 
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const pending = pendingTouchRef.current;
+      if (!pending || event.pointerId !== pending.pointerId) return;
+      const dx = event.clientX - pending.startX;
+      const dy = event.clientY - pending.startY;
+      const distance = Math.hypot(dx, dy);
+      if (!pending.started && distance < TOUCH_DRAG_THRESHOLD) return;
+      if (!pending.started) {
+        pending.started = true;
+      }
+      event.preventDefault();
+      setTouchDrag({
+        tileId: pending.tileId,
+        source: pending.source,
+        x: event.clientX - pending.offsetX,
+        y: event.clientY - pending.offsetY,
+        width: pending.width,
+        height: pending.height,
+      });
+    }
+
+    function handlePointerEnd(event: PointerEvent) {
+      const pending = pendingTouchRef.current;
+      if (!pending || event.pointerId !== pending.pointerId) return;
+      pendingTouchRef.current = null;
+      if (pending.element.hasPointerCapture(event.pointerId)) {
+        pending.element.releasePointerCapture(event.pointerId);
+      }
+      if (!pending.started) return;
+      event.preventDefault();
+      setTouchDrag(null);
+      handleTouchDrop(pending.tileId, pending.source, event.clientX, event.clientY);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerEnd);
+    window.addEventListener("pointercancel", handlePointerEnd);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerEnd);
+      window.removeEventListener("pointercancel", handlePointerEnd);
+    };
+  }, []);
+
   const placedThisTurn = useMemo(
     () => game.placedThisTurn,
     [game.placedThisTurn]
@@ -343,6 +415,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
     () => Math.max(TOTAL_TILES - (game.bag.length + game.rack.length + game.aiRack.length), 0),
     [game.bag.length, game.rack.length, game.aiRack.length]
   );
+  const dragTile = touchDrag ? game.tilesById[touchDrag.tileId] : null;
 
   const canInteract = isPlayerTurn && !aiBusy && !gameOver;
   const canPlay = canInteract && placedThisTurn.length > 0;
@@ -451,6 +524,8 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
     setBlankPicker(null);
     setShowMoreMenu(false);
     setShowHistory(false);
+    setTouchDrag(null);
+    pendingTouchRef.current = null;
     if (finalWinner === "You") recordGameResult("win");
     if (finalWinner === "AI") recordGameResult("loss");
     aiQueuedRef.current = false;
@@ -486,6 +561,80 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
       return true;
     }
     return false;
+  }
+
+  function swapRackTiles(sourceId: string, targetId: string) {
+    if (!canInteract) return;
+    if (sourceId === targetId) return;
+    setGame((g) => {
+      const sourceIndex = g.rack.findIndex((t) => t.id === sourceId);
+      const targetIndex = g.rack.findIndex((t) => t.id === targetId);
+      if (sourceIndex === -1 || targetIndex === -1) return g;
+      const newRack = [...g.rack];
+      [newRack[sourceIndex], newRack[targetIndex]] = [newRack[targetIndex], newRack[sourceIndex]];
+      return { ...g, rack: newRack };
+    });
+  }
+
+  function beginTouchDrag(
+    tileId: string,
+    source: "rack" | "board",
+    event: ReactPointerEvent<HTMLDivElement>
+  ) {
+    if (!canInteract) return;
+    if (event.pointerType === "mouse") return;
+    if (pendingTouchRef.current) return;
+    const element = event.currentTarget as HTMLElement;
+    const rect = element.getBoundingClientRect();
+    pendingTouchRef.current = {
+      tileId,
+      source,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height,
+      element,
+      started: false,
+    };
+    element.setPointerCapture(event.pointerId);
+    setSelectedTileId(null);
+  }
+
+  function handleTouchDrop(
+    tileId: string,
+    source: "rack" | "board",
+    clientX: number,
+    clientY: number
+  ) {
+    const target = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+    if (!target) return;
+
+    const boardCell = target.closest("[data-board-x][data-board-y]") as HTMLElement | null;
+    if (boardCell) {
+      const x = Number(boardCell.dataset.boardX);
+      const y = Number(boardCell.dataset.boardY);
+      if (!Number.isNaN(x) && !Number.isNaN(y)) {
+        placeTileAt(tileId, x, y);
+        return;
+      }
+    }
+
+    if (source === "rack") {
+      const rackTile = target.closest("[data-rack-tile='true']") as HTMLElement | null;
+      const targetId = rackTile?.dataset.tileId;
+      if (targetId && targetId !== tileId) {
+        swapRackTiles(tileId, targetId);
+        return;
+      }
+    }
+
+    if (source === "board") {
+      const rackDrop = target.closest("[data-rack-drop='true']") as HTMLElement | null;
+      if (rackDrop) removePlacedTile(tileId);
+    }
   }
 
   function onSelectRackTile(tileId: string) {
@@ -877,6 +1026,8 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
     setAiBusy(false);
     setShowHistory(false);
     setMoveHistory([]);
+    setTouchDrag(null);
+    pendingTouchRef.current = null;
     aiQueuedRef.current = false;
     setBlankPicker(null);
     setGameOver(null);
@@ -1001,6 +1152,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
                   showHiddenHints={showHiddenHints}
                   canDrag={canInteract}
                   onDropTile={onBoardDrop}
+                  onTilePointerDown={(tileId, event) => beginTouchDrag(tileId, "board", event)}
                 />
               </div>
             </div>
@@ -1030,6 +1182,8 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
                 onSelect={onSelectRackTile}
                 draggable={canInteract}
                 onTileDragStart={onRackDragStart}
+                onTilePointerDown={(tileId, event) => beginTouchDrag(tileId, "rack", event)}
+                onTileSwapDrop={swapRackTiles}
                 onDropTile={onRackDrop}
               />
             </div>
@@ -1144,6 +1298,7 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
               showHiddenHints={showHiddenHints}
               canDrag={canInteract}
               onDropTile={onBoardDrop}
+              onTilePointerDown={(tileId, event) => beginTouchDrag(tileId, "board", event)}
             />
           </div>
         </div>
@@ -1157,6 +1312,8 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
             onSelect={onSelectRackTile}
             draggable={canInteract}
             onTileDragStart={onRackDragStart}
+            onTilePointerDown={(tileId, event) => beginTouchDrag(tileId, "rack", event)}
+            onTileSwapDrop={swapRackTiles}
             onDropTile={onRackDrop}
           />
         </div>
@@ -1204,6 +1361,24 @@ export default function GameScreen(props: { difficulty: Difficulty; onExit: () =
           </button>
         </div>
       </div>
+
+      {touchDrag && dragTile && (
+        <div
+          className="tile dragGhost"
+          style={{
+            width: touchDrag.width,
+            height: touchDrag.height,
+            transform: `translate3d(${touchDrag.x}px, ${touchDrag.y}px, 0)`,
+            backgroundImage: `url(${tileBase})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+          }}
+        >
+          {!dragTile.isBlank && <div className="tileLetter">{dragTile.letter}</div>}
+          {dragTile.value > 0 && <div className="tileValue">{dragTile.value}</div>}
+        </div>
+      )}
 
       {blankPicker && (
         <div className="blankOverlay" onClick={() => setBlankPicker(null)}>

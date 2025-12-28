@@ -1,4 +1,5 @@
 import { BoardCell, PlacedTile, Tile as TileType } from "../game/types";
+import type { PointerEvent } from "react";
 import tileBase from "../assets/tile-base.png";
 import tileBaseLast from "../assets/tile-baseLast.png";
 
@@ -24,6 +25,7 @@ export default function Board(props: {
   showHiddenHints?: boolean;
   canDrag?: boolean;
   onDropTile?: (tileId: string, source: "rack" | "board", x: number, y: number) => void;
+  onTilePointerDown?: (tileId: string, event: PointerEvent<HTMLDivElement>) => void;
 }) {
   const placedSet = new Set(props.placedThisTurn.map((p) => `${p.x},${p.y}`));
   const lastPlayedSet = new Set(props.lastPlayedIds ?? []);
@@ -70,6 +72,8 @@ export default function Board(props: {
               key={`${x}-${y}`}
               className={cls}
               data-has-tile={hasTile ? "true" : "false"}
+              data-board-x={x}
+              data-board-y={y}
               onClick={() => props.onTapSquare(x, y)}
               onDragOver={(event) => {
                 if (props.onDropTile) event.preventDefault();
@@ -112,6 +116,10 @@ export default function Board(props: {
                     event.dataTransfer.setData("text/plain", tile.id);
                     event.dataTransfer.setData("application/x-tile-source", "board");
                     event.dataTransfer.effectAllowed = "move";
+                  }}
+                  onPointerDown={(event) => {
+                    if (!props.canDrag || !placedNow || !props.onTilePointerDown) return;
+                    props.onTilePointerDown(tile.id, event);
                   }}
                 >
                   <div className="boardTileLetter">{displayLetter}</div>

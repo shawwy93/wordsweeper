@@ -1,4 +1,4 @@
-import type { DragEvent } from "react";
+import type { DragEvent, PointerEvent } from "react";
 import { Tile as TileType } from "../game/types";
 import Tile from "./Tile";
 
@@ -8,11 +8,14 @@ export default function Rack(props: {
   onSelect: (tileId: string) => void;
   draggable?: boolean;
   onTileDragStart?: (tileId: string, event: DragEvent<HTMLDivElement>) => void;
+  onTilePointerDown?: (tileId: string, event: PointerEvent<HTMLDivElement>) => void;
+  onTileSwapDrop?: (sourceId: string, targetId: string) => void;
   onDropTile?: (tileId: string, source: "rack" | "board") => void;
 }) {
   return (
     <div
       className="rack"
+      data-rack-drop="true"
       onDragOver={(event) => {
         if (props.onDropTile) event.preventDefault();
       }}
@@ -39,6 +42,31 @@ export default function Rack(props: {
               ? (event) => props.onTileDragStart?.(t.id, event)
               : undefined
           }
+          onPointerDown={
+            props.onTilePointerDown
+              ? (event) => props.onTilePointerDown?.(t.id, event)
+              : undefined
+          }
+          onDragOver={
+            props.onTileSwapDrop
+              ? (event) => {
+                  event.preventDefault();
+                }
+              : undefined
+          }
+          onDrop={
+            props.onTileSwapDrop
+              ? (event) => {
+                  event.preventDefault();
+                  const source = event.dataTransfer.getData("application/x-tile-source");
+                  const tileId = event.dataTransfer.getData("text/plain");
+                  if (!tileId || source !== "rack") return;
+                  props.onTileSwapDrop?.(tileId, t.id);
+                }
+              : undefined
+          }
+          dataTileId={t.id}
+          dataRackTile
         />
       ))}
     </div>
