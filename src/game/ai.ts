@@ -243,24 +243,31 @@ function chooseNormal(moves: AiMove[]) {
 function chooseEasy(moves: AiMove[]) {
   const withEvil = moves.filter((move) => move.evilHits > 0);
   const pool = withEvil.length > 0 ? withEvil : moves;
-  const sorted = [...pool].sort((a, b) => {
-    if (b.evilHits != a.evilHits) return b.evilHits - a.evilHits;
-    if (a.maxWordLength != b.maxWordLength) return a.maxWordLength - b.maxWordLength;
-    return a.score - b.score;
-  });
-  const short = sorted.filter((move) => move.maxWordLength <= 4);
-  const base = short.length > 0 ? short : sorted;
-  const cap = Math.min(base.length, 12);
-  let pickFrom = base.slice(0, cap);
-  if (pickFrom.length > 3) {
-    const start = Math.floor(pickFrom.length * 0.4);
-    pickFrom = pickFrom.slice(start);
+
+  const short = pool.filter((move) => move.maxWordLength <= 4);
+  const medium = pool.filter((move) => move.maxWordLength >= 5 && move.maxWordLength <= 6);
+  const long = pool.filter((move) => move.maxWordLength >= 7);
+
+  const roll = Math.random();
+  let pickPool = roll < 0.55 ? short : roll < 0.9 ? medium : long;
+  if (pickPool.length == 0) {
+    pickPool = short.length > 0 ? short : pool;
   }
-  if (Math.random() < 0.2) {
-    pickFrom = base;
+
+  const sorted = [...pickPool].sort((a, b) => a.score - b.score);
+  let trimmed = sorted;
+  if (sorted.length > 3) {
+    const limit = Math.max(1, Math.floor(sorted.length * 0.85));
+    trimmed = sorted.slice(0, limit);
   }
-  return pickFrom[Math.floor(Math.random() * pickFrom.length)];
+
+  if (trimmed.length > 1 && Math.random() < 0.2) {
+    trimmed = trimmed.slice(Math.floor(trimmed.length * 0.2));
+  }
+
+  return trimmed[Math.floor(Math.random() * trimmed.length)];
 }
+
 
 export function chooseAiMove(g: GameState): AiMove | null {
   if (g.aiRack.length === 0) return null;
