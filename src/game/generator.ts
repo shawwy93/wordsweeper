@@ -93,8 +93,52 @@ export function generateModifiers(board: BoardCell[][]) {
 
   // Balance pass: adjust total EV between top and bottom halves
   balanceTopBottom(board);
+  addVisibleGoodNearEvil(board);
 
   return board;
+}
+
+
+function isEvil(mod: ModifierType) {
+  return mod === "EVIL_LETTER" || mod === "EVIL_WORD";
+}
+
+
+function addVisibleGoodNearEvil(board: BoardCell[][]) {
+  const size = board.length;
+  const occupied = new Set<string>();
+  const dirs = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+  ];
+  const goodPool: ModifierType[] = ["DL", "DW", "TL"];
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const cell = board[y][x];
+      if (!cell.modifier || !isEvil(cell.modifier)) continue;
+      const options = dirs
+        .map((d) => ({ x: x + d.x, y: y + d.y }))
+        .filter((pos) => pos.x >= 0 && pos.x < size && pos.y >= 0 && pos.y < size)
+        .filter((pos) => {
+          const target = board[pos.y][pos.x];
+          if (!target) return false;
+          if (target.isCenter) return false;
+          if (target.modifier) return false;
+          if (occupied.has(key(pos.x, pos.y))) return false;
+          return true;
+        });
+      if (options.length === 0) continue;
+      const choice = options[randInt(options.length)];
+      const target = board[choice.y][choice.x];
+      target.modifier = goodPool[randInt(goodPool.length)];
+      target.revealed = true;
+      target.triggered = false;
+      occupied.add(key(choice.x, choice.y));
+    }
+  }
 }
 
 function ev(mod: ModifierType) {

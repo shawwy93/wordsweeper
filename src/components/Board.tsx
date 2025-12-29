@@ -2,6 +2,8 @@ import { BoardCell, PlacedTile, Tile as TileType } from "../game/types";
 import type { PointerEvent } from "react";
 import tileBase from "../assets/tile-base.png";
 import tileBaseLast from "../assets/tile-baseLast.png";
+import tileBaseGood from "../assets/tile-baseGood.png";
+import tileBaseBad from "../assets/tile-baseBad.png";
 
 function modLabel(mod: BoardCell["modifier"]) {
   switch (mod) {
@@ -66,6 +68,16 @@ export default function Board(props: {
           const hasTile = !!tile;
           const isLastPlayed = tile ? lastPlayedSet.has(tile.id) : false;
           const displayLetter = tile ? cell.letterOverride ?? tile.letter : "";
+          const isEvilMod = cell.modifier === "EVIL_LETTER" || cell.modifier === "EVIL_WORD";
+          const hasModifier = !!cell.modifier;
+          const showModifierTile = hasModifier && cell.revealed;
+          const tileBackground = showModifierTile
+            ? isEvilMod
+              ? tileBaseBad
+              : tileBaseGood
+            : isLastPlayed && !hasModifier
+              ? tileBaseLast
+              : tileBase;
 
           return (
             <div
@@ -103,9 +115,9 @@ export default function Board(props: {
 
               {tile ? (
                 <div
-                  className={`boardTile ${placedNow ? "boardTilePlaced" : ""} ${isLastPlayed ? "boardTileLast" : ""}`}
+                  className={`boardTile ${placedNow ? "boardTilePlaced" : ""} ${isLastPlayed && !hasModifier ? "boardTileLast" : ""}`}
                   style={{
-                    backgroundImage: `url(${isLastPlayed ? tileBaseLast : tileBase})`,
+                    backgroundImage: `url(${tileBackground})`,
                     backgroundSize: "125%",
                     backgroundPosition: "center",
                     backgroundRepeat: "no-repeat",

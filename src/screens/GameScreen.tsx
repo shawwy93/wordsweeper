@@ -23,7 +23,7 @@ const MAX_SWAPS = 3;
 const PASS_STREAK_LIMIT = 5;
 
 type PlayModalState =
-  | { type: "confirm"; words: WordPlay[]; points: number }
+  | { type: "confirm"; words: WordPlay[]; points: number; estimate: number }
   | { type: "invalid"; words: WordPlay[]; reason: string }
   | null;
 
@@ -1118,7 +1118,20 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     queueAiMove();
   }
 
-  function openSubmitModal() {
+  
+  function estimateScore(current: GameState, words: WordPlay[]) {
+    const board = current.board.map((row) =>
+      row.map((cell) => {
+        if (cell.modifier && !cell.revealed) {
+          return { ...cell, triggered: true };
+        }
+        return cell;
+      })
+    );
+    return scoreTurn({ ...current, board }, words);
+  }
+
+function openSubmitModal() {
     if (!canInteract) return;
     const result = validateMove(game);
     if (!result.ok) {
@@ -1127,7 +1140,8 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     }
 
     const points = scoreTurn(game, result.words);
-    setPlayModal({ type: "confirm", words: result.words, points });
+    const estimate = estimateScore(game, result.words);
+    setPlayModal({ type: "confirm", words: result.words, points, estimate });
   }
 
   function queueAiMove() {
@@ -1821,7 +1835,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
                     <WordTiles key={w.text} word={w.text} />
                   ))}
                 </div>
-                <div className="confirmMeta">Estimated points: {playModal.points}</div>
+                <div className="confirmMeta">Estimated points: ~{playModal.estimate}</div>
                 <div className="confirmButtons">
                   <button
                     type="button"
