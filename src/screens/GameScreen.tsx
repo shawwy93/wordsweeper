@@ -10,6 +10,9 @@ import { chooseAiMove, findBestMoveForRack, findHintMove } from "../game/ai";
 import { validateMove, type WordPlay } from "../game/validation";
 import { recordGameResult, recordGameStart, recordMoveStats } from "../game/stats";
 import tileBase from "../assets/tile-base.png";
+import autoplayIcon from "../assets/autoplayIcon.png";
+import overdrawIcon from "../assets/overdrawIcon.png";
+import revealIcon from "../assets/revealIcon.png";
 
 import placeAudioSrc from "../assets/audio/placeAudio.mp3";
 import shuffleAudioSrc from "../assets/audio/shuffleAudio.mp3";
@@ -310,6 +313,14 @@ function IconHint() {
       <path d="M9 18h6" stroke="currentColor" strokeWidth="2" />
       <path d="M10 21h4" stroke="currentColor" strokeWidth="2" />
       <path d="M12 3a6 6 0 0 0-3 11c.9.5 1 1.2 1 2h4c0-.8.1-1.5 1-2a6 6 0 0 0-3-11z" stroke="currentColor" strokeWidth="2" fill="none" />
+    </svg>
+  );
+}
+
+function IconPower() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M13 2L4 13h6l-1 9 9-11h-6l1-9z" stroke="currentColor" strokeWidth="2" fill="none" />
     </svg>
   );
 }
@@ -1762,14 +1773,8 @@ function openSubmitModal() {
               <IconButton label="Swap Tiles" onClick={swapRack} disabled={!canSwap}>
                 <IconSwap />
               </IconButton>
-              <IconButton label={powerUpUsed ? "Power-up Used" : "Power-ups"} onClick={openPowerUps} disabled={gameOver}>
-                <IconHint />
-              </IconButton>
               <IconButton label="Pass" onClick={passTurn} disabled={!canInteract}>
                 <IconPass />
-              </IconButton>
-              <IconButton label="Undo Last" onClick={undo} disabled={!canInteract || placedThisTurn.length === 0}>
-                <IconUndo />
               </IconButton>
               <IconButton label="Recall Turn" onClick={recallTurn} disabled={!canInteract || placedThisTurn.length === 0}>
                 <IconRecall />
@@ -1914,12 +1919,12 @@ function openSubmitModal() {
               <button
                 className="iconButton compact"
                 type="button"
-                onClick={undo}
-                disabled={!canInteract || placedThisTurn.length === 0}
-                aria-label="Undo"
+                onClick={openPowerUps}
+                disabled={!canInteract}
+                aria-label="Power"
               >
-                <span className="iconGlyph"><IconUndo /></span>
-                <span className="iconLabel">Undo</span>
+                <span className="iconGlyph"><IconPower /></span>
+                <span className="iconLabel">Power</span>
               </button>
               <button
                 className="iconButton play"
@@ -2054,12 +2059,12 @@ function openSubmitModal() {
           <button
             className="actionButton"
             type="button"
-            onClick={undo}
-            disabled={!canInteract || placedThisTurn.length === 0}
-            aria-label="Undo"
+            onClick={openPowerUps}
+            disabled={!canInteract}
+            aria-label="Power"
           >
-            <span className="iconGlyph"><IconUndo /></span>
-            <span className="iconLabel">Undo</span>
+            <span className="iconGlyph"><IconPower /></span>
+            <span className="iconLabel">Power</span>
           </button>
           <button className="actionButton" type="button" onClick={passTurn} disabled={!canInteract} aria-label="Pass">
             <span className="iconGlyph"><IconPass /></span>
@@ -2246,9 +2251,6 @@ function openSubmitModal() {
               <button className="moreActionButton" type="button" onClick={handleSettings}>
                 Settings
               </button>
-              <button className="moreActionButton" type="button" onClick={openPowerUps}>
-                {powerUpUsed ? "Power-up Used" : "Power-ups"}
-              </button>
               <button className="moreActionButton danger" type="button" onClick={resignGame}>
                 Resign
               </button>
@@ -2261,7 +2263,7 @@ function openSubmitModal() {
         <div className="powerOverlay" onClick={closePowerUps} role="presentation">
           <div className="powerCard" onClick={(event) => event.stopPropagation()}>
             <div className="powerHeader">
-              <div>Power-ups</div>
+              <div>Power</div>
               <button className="iconButton tiny" type="button" onClick={closePowerUps} aria-label="Close">
                 <span className="iconGlyph">X</span>
               </button>
@@ -2277,7 +2279,10 @@ function openSubmitModal() {
                 onClick={activateAutoPlay}
                 disabled={!canUsePowerUp}
               >
-                <div className="powerName">Auto Play</div>
+                <div className="powerItemHeader">
+                  <img className="powerItemIcon" src={autoplayIcon} alt="Auto Play" />
+                  <div className="powerName">Auto Play</div>
+                </div>
                 <div className="powerDesc">Automatically plays the highest-scoring word from your rack.</div>
                 <div className="powerRisk">Downside: you lose placement control; may hit evil tiles.</div>
               </button>
@@ -2287,7 +2292,10 @@ function openSubmitModal() {
                 onClick={activateForcedReveal}
                 disabled={!canUsePowerUp}
               >
-                <div className="powerName">Forced Reveal</div>
+                <div className="powerItemHeader">
+                  <img className="powerItemIcon" src={revealIcon} alt="Forced Reveal" />
+                  <div className="powerName">Forced Reveal</div>
+                </div>
                 <div className="powerDesc">Reveal a 3x3 area of hidden modifiers.</div>
                 <div className="powerRisk">Downside: one revealed square becomes an evil word tile.</div>
               </button>
@@ -2297,7 +2305,10 @@ function openSubmitModal() {
                 onClick={activateOverdraw}
                 disabled={!canUsePowerUp || game.bag.length === 0}
               >
-                <div className="powerName">Overdraw</div>
+                <div className="powerItemHeader">
+                  <img className="powerItemIcon" src={overdrawIcon} alt="Overdraw" />
+                  <div className="powerName">Overdraw</div>
+                </div>
                 <div className="powerDesc">Draw +3 tiles this turn (rack can exceed the limit).</div>
                 <div className="powerRisk">Downside: highest-value unused tile is destroyed after your turn.</div>
               </button>
