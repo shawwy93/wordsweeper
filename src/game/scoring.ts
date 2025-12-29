@@ -12,6 +12,11 @@ export function scoreTurn(g: GameState, words: WordPlay[]): number {
   let total = 0;
 
   for (const word of words) {
+    const wordText = word.text.toUpperCase();
+    if (wordText === "BATMAN") {
+      total += 100;
+      continue;
+    }
     let base = 0;
     let wordMult = 1;
     let evilWordCount = 0;

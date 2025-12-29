@@ -33,6 +33,8 @@ const BLOCKED_WORDS = new Set(
     .filter((w) => /^[A-Z]+$/.test(w))
 );
 
+const SPECIAL_WORDS = new Set(["BATMAN"]);
+
 const WORDS = rawWords
   .split(/\r?\n/)
   .map((w) => w.trim().toUpperCase())
@@ -47,7 +49,10 @@ export const RACK_HELP_WORDS: RackWord[] = WORDS
   .map((w) => ({ text: w, counts: buildCounts(w), length: w.length }));
 
 export const DICTIONARY = new Set(WORDS);
+SPECIAL_WORDS.forEach((w) => DICTIONARY.add(w));
 
 export function isWord(word: string) {
-  return DICTIONARY.has(word.toUpperCase());
+  const upper = word.toUpperCase();
+  if (SPECIAL_WORDS.has(upper)) return true;
+  return DICTIONARY.has(upper);
 }

@@ -15,6 +15,36 @@ const ASSIST_CONFIG: Record<Difficulty, { attempts: number; minLen: number; maxL
   hard: { attempts: 3, minLen: 2, maxLen: 2, acceptChance: 0.35 },
 };
 
+const BATMAN_LETTERS = ["B", "A", "T", "M", "A", "N"];
+
+function buildBatmanRack(bag: Tile[]) {
+  const bagCopy = [...bag];
+  const rack: Tile[] = [];
+  for (const letter of BATMAN_LETTERS) {
+    const idx = bagCopy.findIndex((t) => !t.isBlank && t.letter === letter);
+    if (idx == -1) return null;
+    const [tile] = bagCopy.splice(idx, 1);
+    rack.push(tile);
+  }
+  while (rack.length < RACK_SIZE && bagCopy.length > 0) {
+    const extraIndex = bagCopy.findIndex((t) => !t.isBlank && BATMAN_LETTERS.includes(t.letter));
+    if (extraIndex >= 0) {
+      const [tile] = bagCopy.splice(extraIndex, 1);
+      rack.push(tile);
+      continue;
+    }
+    const blankIndex = bagCopy.findIndex((t) => t.isBlank);
+    if (blankIndex >= 0) {
+      const [tile] = bagCopy.splice(blankIndex, 1);
+      rack.push(tile);
+      continue;
+    }
+    break;
+  }
+  return { rack, bag: bagCopy };
+}
+
+
 function letterCounts(rack: Tile[]) {
   const counts = new Array(26).fill(0);
   let blanks = 0;
@@ -196,11 +226,27 @@ export function createNewGame(difficulty: Difficulty): GameState {
   const board = generateModifiers(baseBoard);
 
   const bag = shuffle(createTileBag(difficulty));
-  const playerDraw = draw(bag, RACK_SIZE);
-  const balancedPlayer = rebalanceRack(playerDraw.take, playerDraw.rest);
-  const assistedPlayer = assistPlayerRack(balancedPlayer.rack, balancedPlayer.bag, difficulty);
-  const aiDraw = draw(assistedPlayer.bag, RACK_SIZE);
-  const balancedAi = rebalanceRack(aiDraw.take, assistedPlayer.bag);
+  let playerRack: Tile[] | null = null;
+  let bagAfterPlayer = bag;
+
+  if (Math.random() < 0.5) {
+    const batman = buildBatmanRack(bag);
+    if (batman) {
+      playerRack = batman.rack;
+      bagAfterPlayer = batman.bag;
+    }
+  }
+
+  if (!playerRack) {
+    const playerDraw = draw(bag, RACK_SIZE);
+    const balancedPlayer = rebalanceRack(playerDraw.take, playerDraw.rest);
+    const assistedPlayer = assistPlayerRack(balancedPlayer.rack, balancedPlayer.bag, difficulty);
+    playerRack = assistedPlayer.rack;
+    bagAfterPlayer = assistedPlayer.bag;
+  }
+
+  const aiDraw = draw(bagAfterPlayer, RACK_SIZE);
+  const balancedAi = rebalanceRack(aiDraw.take, aiDraw.rest);
 
   const tilesById: Record<string, Tile> = {};
   for (const t of bag) tilesById[t.id] = t;
@@ -209,7 +255,7 @@ export function createNewGame(difficulty: Difficulty): GameState {
     difficulty,
     board,
     bag: balancedAi.bag,
-    rack: assistedPlayer.rack,
+    rack: playerRack,
     aiRack: balancedAi.rack,
     tilesById,
     placedThisTurn: [],

@@ -10,7 +10,6 @@ import { chooseAiMove, findHintMove } from "../game/ai";
 import { validateMove, type WordPlay } from "../game/validation";
 import { recordGameResult, recordGameStart, recordMoveStats } from "../game/stats";
 import tileBase from "../assets/tile-base.png";
-import tileBaseLast from "../assets/tile-baseLast.png";
 
 import placeAudioSrc from "../assets/audio/placeAudio.mp3";
 import shuffleAudioSrc from "../assets/audio/shuffleAudio.mp3";
@@ -366,11 +365,8 @@ function collectWordTileIds(words: WordPlay[]) {
 
 function pickHintWord(words: WordPlay[]) {
   if (words.length === 0) return null;
-  let best = words[0];
-  for (const word of words) {
-    if (word.text.length > best.text.length) best = word;
-  }
-  return best;
+  const idx = Math.floor(Math.random() * words.length);
+  return words[idx];
 }
 
 
@@ -1894,7 +1890,7 @@ function openSubmitModal() {
           <div
             className="turnScoreTile"
             style={{
-              backgroundImage: `url(${tileBaseLast})`,
+              backgroundImage: `url(${tileBase})`,
             }}
           >
             <div className="turnScoreValue">{turnScoreToast.points}</div>
