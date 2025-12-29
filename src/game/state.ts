@@ -229,7 +229,7 @@ export function createNewGame(difficulty: Difficulty): GameState {
   let playerRack: Tile[] | null = null;
   let bagAfterPlayer = bag;
 
-  if (Math.random() < 0.1) {
+  if (Math.random() < 0.02) {
     const batman = buildBatmanRack(bag);
     if (batman) {
       playerRack = batman.rack;

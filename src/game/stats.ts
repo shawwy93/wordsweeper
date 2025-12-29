@@ -90,3 +90,7 @@ export function recordGameResult(result: "win" | "loss") {
   else stats.losses += 1;
   saveStats(stats);
 }
+export function resetStats() {
+  saveStats({ ...DEFAULT_STATS });
+}
+

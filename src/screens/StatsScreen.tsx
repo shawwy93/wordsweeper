@@ -1,9 +1,14 @@
 import Button from "../components/Button";
 import TopBar from "../components/TopBar";
-import { loadStats } from "../game/stats";
+import { loadStats, resetStats } from "../game/stats";
 
 export default function StatsScreen(props: { onBack: () => void }) {
   const s = loadStats();
+
+  function handleReset() {
+    resetStats();
+    window.location.reload();
+  }
 
   return (
     <div className="screen">
@@ -53,6 +58,10 @@ export default function StatsScreen(props: { onBack: () => void }) {
             </div>
           </div>
 
+          <div style={{ height: 16 }} />
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <Button onClick={handleReset}>Reset stats</Button>
+          </div>
           <div style={{ height: 10 }} />
           <div className="small">
             Stats are stored locally on this device.
