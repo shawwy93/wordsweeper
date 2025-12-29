@@ -19,6 +19,7 @@ import winAudioSrc from "../assets/audio/winAudio.mp3";
 
 const AI_DELAY_MS = 650;
 const TURN_SCORE_DURATION_MS = 5000;
+const TURN_SCORE_ANIM_MS = 2200;
 const TOUCH_DRAG_THRESHOLD = 6;
 const MAX_SWAPS = 3;
 const PASS_STREAK_LIMIT = 5;
@@ -501,7 +502,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     const delta = points - estimate;
 
     const animate = (now: number) => {
-      const progress = Math.min((now - start) / TURN_SCORE_DURATION_MS, 1);
+      const progress = Math.min((now - start) / TURN_SCORE_ANIM_MS, 1);
       const value = Math.round(estimate + delta * progress);
       setTurnScoreToast((current) => {
         if (!current || current.id !== id) return current;
@@ -1782,7 +1783,19 @@ function openSubmitModal() {
           </div>
         </div>
 
-        <div className="lettersLeft">{game.bag.length} letters left</div>
+        <div className="lettersRow">
+          <div className="lettersLeft">{game.bag.length} letters left</div>
+          <button
+            className="hintMini"
+            type="button"
+            onClick={showHint}
+            disabled={!canHint}
+            aria-label="Hint"
+          >
+            <span className="iconGlyph"><IconHint /></span>
+            <span>Hint</span>
+          </button>
+        </div>
 
         <div className="mobileRack">
           <Rack
@@ -1811,16 +1824,6 @@ function openSubmitModal() {
           >
             <span className="iconGlyph"><IconUndo /></span>
             <span className="iconLabel">Undo</span>
-          </button>
-          <button
-            className="actionButton"
-            type="button"
-            onClick={showHint}
-            disabled={!canHint}
-            aria-label="Hint"
-          >
-            <span className="iconGlyph"><IconHint /></span>
-            <span className="iconLabel">Hint</span>
           </button>
           <button className="actionButton" type="button" onClick={passTurn} disabled={!canInteract} aria-label="Pass">
             <span className="iconGlyph"><IconPass /></span>

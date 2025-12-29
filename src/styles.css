@@ -82,7 +82,7 @@ body.gameBackground {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: clamp(95px, 2vw, 50px);
+  padding: clamp(45px, 2vw, 50px);
 }
 .menuHeaderSpacer {
   flex: 1.1;
@@ -92,7 +92,7 @@ body.gameBackground {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(10px, 2.8vh, 24px);
+  gap: clamp(1px, 2.8vh, 15px);
   padding: 0 clamp(12px, 6vw, 90px) clamp(-100px, 4vh, 100px);
 }
 
@@ -1469,6 +1469,7 @@ body.gameBackground {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 .mobilePlayerBlock {
   display: flex;
@@ -1552,6 +1553,12 @@ body.gameBackground {
 
 }
 
+.lettersRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
 .lettersLeft {
   text-align: center;
   font-size: 13px;
@@ -1563,6 +1570,30 @@ body.gameBackground {
   background: rgba(8, 18, 28, 0.55);
   text-shadow: 0 2px 6px rgba(0,0,0,0.45);
   justify-self: center;
+}
+.hintMini {
+  border: 1px solid var(--glass-border);
+  background: rgba(10, 30, 44, 0.6);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 6px 12px rgba(6, 16, 24, 0.24);
+}
+.hintMini svg {
+  width: 14px;
+  height: 14px;
+}
+.hintMini:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .mobileRack {
@@ -1580,7 +1611,7 @@ body.gameBackground {
 
 .mobileActionBar {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
   padding: 8px;
   border-radius: 18px;
@@ -1588,6 +1619,81 @@ body.gameBackground {
   border: 1px solid var(--glass-border);
   box-shadow: inset 0 1px 0 var(--glass-highlight), 0 10px 18px rgba(6, 12, 18, 0.28);
   backdrop-filter: blur(16px) saturate(1.1);
+}
+
+
+.mobileActionBar .actionButton {
+  min-width: 0;
+}
+
+@media (max-width: 430px) {
+  .mobileShell {
+    padding: 10px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    gap: 6px;
+  }
+  .mobileTopBar {
+    padding: 6px;
+    gap: 6px;
+  }
+  .mobileHistoryButton {
+    padding: 6px 8px;
+    font-size: 10px;
+    letter-spacing: 0.4px;
+    max-width: 72px;
+  }
+  .mobileIconButton {
+    width: 36px;
+    height: 36px;
+  }
+  .mobileAvatar {
+    width: 28px;
+    height: 28px;
+    font-size: 9px;
+  }
+  .mobilePlayerScore {
+    font-size: 14px;
+  }
+  .mobileTurnInfo {
+    font-size: 10px;
+  }
+  .mobileBoardFrame {
+    width: min(92vw, 44vh);
+    height: min(92vw, 44vh);
+  }
+  .mobileActionBar {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+    padding: 6px;
+  }
+  .mobileActionBar .actionButton {
+    min-width: 0;
+  }
+  .actionButton {
+    min-height: 44px;
+    padding: 5px 2px;
+    font-size: 9px;
+  }
+  .actionButton svg {
+    width: 14px;
+    height: 14px;
+  }
+  .actionButton .iconLabel {
+    font-size: 8px;
+  }
+  .lettersRow {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .hintMini {
+    padding: 5px 8px;
+    font-size: 9px;
+  }
+  .hintMini svg {
+    width: 12px;
+    height: 12px;
+  }
 }
 
 @media (min-width: 901px) {
