@@ -448,3 +448,17 @@ export function chooseAiMove(g: GameState): AiMove | null {
   const pool = candidates.length > 0 ? candidates : [best];
   return g.difficulty === "easy" ? chooseEasy(pool) : chooseNormal(pool);
 }
+
+
+export function findHintMove(g: GameState): AiMove | null {
+  const base: GameState = {
+    ...g,
+    aiRack: g.rack,
+    placedThisTurn: [],
+  };
+  const easy = chooseAiMove({ ...base, difficulty: "easy" });
+  if (easy) return easy;
+  const normal = chooseAiMove({ ...base, difficulty: "normal" });
+  if (normal) return normal;
+  return chooseAiMove({ ...base, difficulty: "hard" });
+}

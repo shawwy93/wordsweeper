@@ -51,7 +51,11 @@ export function loadStats(): Stats {
 }
 
 function saveStats(stats: Stats) {
-  localStorage.setItem("hh_stats", JSON.stringify(stats));
+  try {
+    localStorage.setItem("hh_stats", JSON.stringify(stats));
+  } catch {
+    // ignore storage errors
+  }
 }
 
 export function recordGameStart() {

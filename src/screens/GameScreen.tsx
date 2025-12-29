@@ -3,13 +3,14 @@ import Board from "../components/Board";
 import Rack from "../components/Rack";
 import ScorePanel from "../components/ScorePanel";
 import { Difficulty, PlacedTile, Tile, GameState } from "../game/types";
-import { createNewGame, rebalanceRack } from "../game/state";
+import { assistPlayerRack, createNewGame, rebalanceRack } from "../game/state";
 import { applyRevealThisTurn, scoreTurn } from "../game/scoring";
 import { createTileBag, RACK_SIZE } from "../game/constants";
-import { chooseAiMove } from "../game/ai";
+import { chooseAiMove, findHintMove } from "../game/ai";
 import { validateMove, type WordPlay } from "../game/validation";
 import { recordGameResult, recordGameStart, recordMoveStats } from "../game/stats";
 import tileBase from "../assets/tile-base.png";
+import tileBaseLast from "../assets/tile-baseLast.png";
 
 import placeAudioSrc from "../assets/audio/placeAudio.mp3";
 import shuffleAudioSrc from "../assets/audio/shuffleAudio.mp3";
@@ -26,6 +27,10 @@ type PlayModalState =
   | { type: "confirm"; words: WordPlay[]; points: number; estimate: number }
   | { type: "invalid"; words: WordPlay[]; reason: string }
   | null;
+
+type HintCell = { x: number; y: number };
+
+type TurnScoreToast = { id: number; points: number };
 
 type MoveEntry = {
   id: string;
@@ -140,11 +145,13 @@ function shuffle<T>(arr: T[]) {
   return copy;
 }
 
-function refillRack(rack: Tile[], bag: Tile[]) {
+function refillRack(rack: Tile[], bag: Tile[], difficulty?: Difficulty) {
   const needed = Math.max(RACK_SIZE - rack.length, 0);
   const take = bag.slice(0, needed);
   const rest = bag.slice(needed);
-  return rebalanceRack([...rack, ...take], rest);
+  const balanced = rebalanceRack([...rack, ...take], rest);
+  if (!difficulty) return balanced;
+  return assistPlayerRack(balanced.rack, balanced.bag, difficulty);
 }
 
 function applyAiPlacements(g: GameState, placements: PlacedTile[]) {
@@ -268,6 +275,16 @@ function IconRecall() {
   );
 }
 
+function IconHint() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9 18h6" stroke="currentColor" strokeWidth="2" />
+      <path d="M10 21h4" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 3a6 6 0 0 0-3 11c.9.5 1 1.2 1 2h4c0-.8.1-1.5 1-2a6 6 0 0 0-3-11z" stroke="currentColor" strokeWidth="2" fill="none" />
+    </svg>
+  );
+}
+
 function IconHistory() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -339,6 +356,24 @@ function clearPlayerPlacements(g: GameState) {
   };
 }
 
+function collectWordTileIds(words: WordPlay[]) {
+  const ids = new Set<string>();
+  for (const word of words) {
+    for (const cell of word.cells) ids.add(cell.tileId);
+  }
+  return Array.from(ids);
+}
+
+function pickHintWord(words: WordPlay[]) {
+  if (words.length === 0) return null;
+  let best = words[0];
+  for (const word of words) {
+    if (word.text.length > best.text.length) best = word;
+  }
+  return best;
+}
+
+
 export default function GameScreen(props: { difficulty: Difficulty; audio: { ui: boolean; game: boolean }; onExit: () => void; onSettings: () => void; resume: boolean }) {
   const savedState = props.resume ? loadSavedGame() : null;
   const [game, setGame] = useState(() => savedState?.game ?? createNewGame(props.difficulty));
@@ -350,6 +385,8 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   const [aiBusy, setAiBusy] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [hintCells, setHintCells] = useState<HintCell[]>([]);
+  const [turnScoreToast, setTurnScoreToast] = useState<TurnScoreToast | null>(null);
   const [moveHistory, setMoveHistory] = useState<MoveEntry[]>(() => savedState?.moveHistory ?? []);
   const [blankPicker, setBlankPicker] = useState<BlankPick | null>(null);
   const [gameOver, setGameOver] = useState<GameOverState | null>(null);
@@ -365,6 +402,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   const scorelessRef = useRef(scorelessTurns);
   const passStreakRef = useRef<PassStreak>(passStreak);
   const gameOverRef = useRef(gameOver);
+  const scoreToastRef = useRef<number | null>(null);
 
   const audioRef = useRef<{
     place: HTMLAudioElement;
@@ -420,6 +458,54 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
 
   function playLoseSound() {
     playSound(audioRef.current?.lose, "game");
+  }
+
+  function dismissTurnScore() {
+    if (scoreToastRef.current) {
+      window.clearTimeout(scoreToastRef.current);
+      scoreToastRef.current = null;
+    }
+    setTurnScoreToast(null);
+  }
+
+  function showTurnScore(points: number) {
+    if (scoreToastRef.current) {
+      window.clearTimeout(scoreToastRef.current);
+      scoreToastRef.current = null;
+    }
+    const id = Date.now();
+    setTurnScoreToast({ id, points });
+    scoreToastRef.current = window.setTimeout(() => {
+      setTurnScoreToast((current) => (current?.id === id ? null : current));
+      scoreToastRef.current = null;
+    }, 2000);
+  }
+
+  function showHint() {
+    if (!canInteract || placedThisTurn.length > 0) return;
+    playButtonSound();
+    const current = gameRef.current;
+    if (!current) return;
+    const move = findHintMove(current);
+    if (!move) {
+      setHintCells([]);
+      return;
+    }
+    const hintWord = pickHintWord(move.words);
+    if (!hintWord) {
+      setHintCells([]);
+      return;
+    }
+    const seen = new Set<string>();
+    const cells = hintWord.cells
+      .filter((cell) => {
+        const key = `${cell.x},${cell.y}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((cell) => ({ x: cell.x, y: cell.y }));
+    setHintCells(cells);
   }
 
   useEffect(() => {
@@ -482,6 +568,15 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   }, [gameOver]);
 
   useEffect(() => {
+    return () => {
+      if (scoreToastRef.current) {
+        window.clearTimeout(scoreToastRef.current);
+        scoreToastRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
       const pending = pendingTouchRef.current;
       if (!pending || event.pointerId !== pending.pointerId) return;
@@ -532,6 +627,12 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     [game.placedThisTurn]
   );
 
+  useEffect(() => {
+    if (!isPlayerTurn || placedThisTurn.length > 0 || gameOver) {
+      setHintCells([]);
+    }
+  }, [isPlayerTurn, placedThisTurn.length, gameOver]);
+
   const totalTiles = useMemo(() => createTileBag(game.difficulty).length, [game.difficulty]);
 
   const selectedTile = selectedTileId ? game.tilesById[selectedTileId] : null;
@@ -550,6 +651,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     game.bag.length > 0 &&
     swapsUsed < MAX_SWAPS &&
     selectedRackTile;
+  const canHint = canInteract && placedThisTurn.length === 0;
 
   function recordMove(
     player: "You" | "AI",
@@ -651,6 +753,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     setShowMoreMenu(false);
     setShowHistory(false);
     setTouchDrag(null);
+    dismissTurnScore();
     pendingTouchRef.current = null;
     if (finalWinner === "You") recordGameResult("win");
     if (finalWinner === "AI") recordGameResult("loss");
@@ -1104,6 +1207,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
       rack: newRack,
       bag: newBag,
       placedThisTurn: [],
+      lastPlayedIds: [],
     };
     setGame(nextGame);
     setSelectedTileId(null);
@@ -1129,6 +1233,11 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
       })
     );
     return scoreTurn({ ...current, board }, words);
+  }
+
+function confirmPlay() {
+    if (!playModal || playModal.type !== "confirm") return;
+    commitTurn(playModal.words, playModal.points);
   }
 
 function openSubmitModal() {
@@ -1168,7 +1277,7 @@ function openSubmitModal() {
 
       const move = chooseAiMove(current);
       if (!move) {
-        const nextGame = { ...current, placedThisTurn: [] };
+        const nextGame = { ...current, placedThisTurn: [], lastPlayedIds: [] };
         setGame(nextGame);
         recordMoveStats({ player: "AI", words: 0, points: 0, tiles: 0 });
         const nextStats = recordMatchMove({ player: "AI", words: 0, points: 0, tiles: 0 });
@@ -1186,7 +1295,7 @@ function openSubmitModal() {
 
       const sim = applyAiPlacements(current, move.placements);
       if (!sim) {
-        const nextGame = { ...current, placedThisTurn: [] };
+        const nextGame = { ...current, placedThisTurn: [], lastPlayedIds: [] };
         setGame(nextGame);
         recordMoveStats({ player: "AI", words: 0, points: 0, tiles: 0 });
         const nextStats = recordMatchMove({ player: "AI", words: 0, points: 0, tiles: 0 });
@@ -1204,7 +1313,7 @@ function openSubmitModal() {
 
       const validation = validateMove(sim);
       if (!validation.ok) {
-        const nextGame = { ...current, placedThisTurn: [] };
+        const nextGame = { ...current, placedThisTurn: [], lastPlayedIds: [] };
         setGame(nextGame);
         recordMoveStats({ player: "AI", words: 0, points: 0, tiles: 0 });
         const nextStats = recordMatchMove({ player: "AI", words: 0, points: 0, tiles: 0 });
@@ -1242,7 +1351,7 @@ function openSubmitModal() {
         board: nextBoard,
         aiRack: refill.rack,
         bag: refill.bag,
-        lastPlayedIds: move.placements.map((p) => p.tileId),
+        lastPlayedIds: collectWordTileIds(validation.words),
         scores: { ...sim.scores, ai: sim.scores.ai + points },
         placedThisTurn: [],
         lastRevealAnim: Date.now(),
@@ -1277,8 +1386,8 @@ function openSubmitModal() {
     });
     recordMove("You", words, points);
     const { nextBoard } = applyRevealThisTurn(current);
-    const refill = refillRack(current.rack, current.bag);
-    const lastPlayedIds = current.placedThisTurn.map((p) => p.tileId);
+    const refill = refillRack(current.rack, current.bag, current.difficulty);
+    const lastPlayedIds = collectWordTileIds(words);
     const nextGame = {
       ...current,
       board: nextBoard,
@@ -1292,9 +1401,12 @@ function openSubmitModal() {
     setGame(nextGame);
     setSelectedTileId(null);
     setPlayModal(null);
+    showTurnScore(points);
+    setHintCells([]);
     const nextScoreless = updateScoreless(points);
     const nextPassStreak = updatePassStreak("You", false);
     if (checkGameOver(nextGame, nextScoreless, nextStats, nextPassStreak)) return;
+    setIsPlayerTurn(false);
     setTurn((t) => t + 1);
     queueAiMove();
   }
@@ -1304,7 +1416,7 @@ function openSubmitModal() {
     playButtonSound();
     const current = gameRef.current;
     if (!current) return;
-    const nextGame = clearPlayerPlacements(current);
+    const nextGame = { ...clearPlayerPlacements(current), lastPlayedIds: [] };
     setGame(nextGame);
     setSelectedTileId(null);
     recordMoveStats({ player: "You", words: 0, points: 0, tiles: 0 });
@@ -1313,6 +1425,7 @@ function openSubmitModal() {
     const nextScoreless = updateScoreless(0);
     const nextPassStreak = updatePassStreak("You", true);
     if (checkGameOver(nextGame, nextScoreless, nextStats, nextPassStreak)) return;
+    setIsPlayerTurn(false);
     setTurn((t) => t + 1);
     queueAiMove();
   }
@@ -1336,6 +1449,8 @@ function openSubmitModal() {
     setIsPlayerTurn(true);
     setAiBusy(false);
     setShowHistory(false);
+    setHintCells([]);
+    dismissTurnScore();
     setMoveHistory([]);
     setTouchDrag(null);
     pendingTouchRef.current = null;
@@ -1392,6 +1507,9 @@ function openSubmitModal() {
               </IconButton>
               <IconButton label="Swap Tiles" onClick={swapRack} disabled={!canSwap}>
                 <IconSwap />
+              </IconButton>
+              <IconButton label="Hint" onClick={showHint} disabled={!canHint}>
+                <IconHint />
               </IconButton>
               <IconButton label="Pass" onClick={passTurn} disabled={!canInteract}>
                 <IconPass />
@@ -1459,6 +1577,7 @@ function openSubmitModal() {
                   placedThisTurn={placedThisTurn}
                   lastRevealAnim={game.lastRevealAnim}
                   lastPlayedIds={game.lastPlayedIds}
+                  hintCells={hintCells}
                   onTapSquare={onTapSquare}
                   showHiddenHints={showHiddenHints}
                   canDrag={canInteract}
@@ -1606,6 +1725,7 @@ function openSubmitModal() {
               placedThisTurn={placedThisTurn}
               lastRevealAnim={game.lastRevealAnim}
               lastPlayedIds={game.lastPlayedIds}
+              hintCells={hintCells}
               onTapSquare={onTapSquare}
               showHiddenHints={showHiddenHints}
               canDrag={canInteract}
@@ -1644,6 +1764,16 @@ function openSubmitModal() {
           >
             <span className="iconGlyph"><IconUndo /></span>
             <span className="iconLabel">Undo</span>
+          </button>
+          <button
+            className="actionButton"
+            type="button"
+            onClick={showHint}
+            disabled={!canHint}
+            aria-label="Hint"
+          >
+            <span className="iconGlyph"><IconHint /></span>
+            <span className="iconLabel">Hint</span>
           </button>
           <button className="actionButton" type="button" onClick={passTurn} disabled={!canInteract} aria-label="Pass">
             <span className="iconGlyph"><IconPass /></span>
@@ -1759,6 +1889,20 @@ function openSubmitModal() {
         </div>
       )}
 
+      {turnScoreToast && (
+        <div className="turnScoreOverlay" onClick={dismissTurnScore} role="presentation">
+          <div
+            className="turnScoreTile"
+            style={{
+              backgroundImage: `url(${tileBaseLast})`,
+            }}
+          >
+            <div className="turnScoreValue">{turnScoreToast.points}</div>
+            <div className="turnScoreLabel">Total</div>
+          </div>
+        </div>
+      )}
+
       {showHistory && (
         <div className="historyOverlay" onClick={() => setShowHistory(false)}>
           <div className="historyCard" onClick={(event) => event.stopPropagation()}>
@@ -1847,7 +1991,7 @@ function openSubmitModal() {
                   <button
                     type="button"
                     className="confirmBtn primary"
-                    onClick={() => commitTurn(playModal.words, playModal.points)}
+                    onClick={confirmPlay}
                   >
                     Yes
                   </button>

@@ -23,6 +23,7 @@ export default function Board(props: {
   placedThisTurn: PlacedTile[];
   lastRevealAnim: number;
   lastPlayedIds?: string[];
+  hintCells?: Array<{ x: number; y: number }>;
   onTapSquare: (x: number, y: number) => void;
   showHiddenHints?: boolean;
   canDrag?: boolean;
@@ -31,6 +32,7 @@ export default function Board(props: {
 }) {
   const placedSet = new Set(props.placedThisTurn.map((p) => `${p.x},${p.y}`));
   const lastPlayedSet = new Set(props.lastPlayedIds ?? []);
+  const hintSet = new Set((props.hintCells ?? []).map((cell) => `${cell.x},${cell.y}`));
   const size = props.board.length;
 
   return (
@@ -54,6 +56,7 @@ export default function Board(props: {
             isRevealed && cell.revealedAt && cell.revealedAt >= props.lastRevealAnim;
 
           const placedNow = placedSet.has(`${x},${y}`);
+          const isHint = hintSet.has(`${x},${y}`);
 
           const cls =
             "square " +
@@ -61,6 +64,7 @@ export default function Board(props: {
             (isHidden ? "squareHidden " : "") +
             (isRevealed ? "squareRevealed " : "") +
             (hinting ? "squareHint " : "") +
+            (isHint ? "squareHintWord " : "") +
             (animate ? "squareRevealAnim " : "") +
             (placedNow ? "squarePlaced " : "");
 
