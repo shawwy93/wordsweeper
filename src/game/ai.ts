@@ -157,7 +157,11 @@ function scoreWithRevealed(g: GameState, words: WordPlay[]) {
       let letterScore = tile.value;
       let evilLetter = false;
 
-      if (isNew && boardCell.modifier && boardCell.revealed && !boardCell.triggered) {
+      if (boardCell?.modifier === "EVIL_WORD" && boardCell.revealed) {
+        evilWordCount += 1;
+      }
+
+      if (isNew && boardCell.modifier && boardCell.revealed && !boardCell.triggered && boardCell.modifier !== "EVIL_WORD") {
         switch (boardCell.modifier) {
           case "DL":
             letterScore *= 2;
@@ -173,9 +177,6 @@ function scoreWithRevealed(g: GameState, words: WordPlay[]) {
             break;
           case "EVIL_LETTER":
             evilLetter = true;
-            break;
-          case "EVIL_WORD":
-            evilWordCount += 1;
             break;
           default:
             break;

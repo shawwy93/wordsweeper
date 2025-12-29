@@ -18,6 +18,7 @@ import loseAudioSrc from "../assets/audio/loseAudio.mp3";
 import winAudioSrc from "../assets/audio/winAudio.mp3";
 
 const AI_DELAY_MS = 650;
+const TURN_SCORE_DURATION_MS = 5000;
 const TOUCH_DRAG_THRESHOLD = 6;
 const MAX_SWAPS = 3;
 const PASS_STREAK_LIMIT = 5;
@@ -29,7 +30,7 @@ type PlayModalState =
 
 type HintCell = { x: number; y: number };
 
-type TurnScoreToast = { id: number; points: number };
+type TurnScoreToast = { id: number; points: number; estimate: number; display: number; isLower: boolean };
 
 type MoveEntry = {
   id: string;
@@ -399,6 +400,9 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   const passStreakRef = useRef<PassStreak>(passStreak);
   const gameOverRef = useRef(gameOver);
   const scoreToastRef = useRef<number | null>(null);
+  const scoreToastAnimRef = useRef<number | null>(null);
+  const pendingAiAfterScoreRef = useRef(false);
+  const turnScoreRef = useRef<TurnScoreToast | null>(null);
 
   const audioRef = useRef<{
     place: HTMLAudioElement;
@@ -456,25 +460,64 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     playSound(audioRef.current?.lose, "game");
   }
 
-  function dismissTurnScore() {
+  function clearTurnScoreTimers() {
     if (scoreToastRef.current) {
       window.clearTimeout(scoreToastRef.current);
       scoreToastRef.current = null;
     }
-    setTurnScoreToast(null);
+    if (scoreToastAnimRef.current) {
+      window.cancelAnimationFrame(scoreToastAnimRef.current);
+      scoreToastAnimRef.current = null;
+    }
   }
 
-  function showTurnScore(points: number) {
-    if (scoreToastRef.current) {
-      window.clearTimeout(scoreToastRef.current);
-      scoreToastRef.current = null;
+  function dismissTurnScore(allowQueue = false) {
+    if (!turnScoreRef.current && !pendingAiAfterScoreRef.current) return;
+    clearTurnScoreTimers();
+    setTurnScoreToast(null);
+    turnScoreRef.current = null;
+    const shouldQueue = allowQueue && pendingAiAfterScoreRef.current;
+    pendingAiAfterScoreRef.current = false;
+    if (shouldQueue) {
+      queueAiMove();
     }
+  }
+
+  function showTurnScore(estimate: number, points: number, queueAiAfter: boolean) {
+    clearTurnScoreTimers();
     const id = Date.now();
-    setTurnScoreToast({ id, points });
+    const nextToast: TurnScoreToast = {
+      id,
+      points,
+      estimate,
+      display: estimate,
+      isLower: points < estimate,
+    };
+    turnScoreRef.current = nextToast;
+    pendingAiAfterScoreRef.current = queueAiAfter;
+    setTurnScoreToast(nextToast);
+
+    const start = performance.now();
+    const delta = points - estimate;
+
+    const animate = (now: number) => {
+      const progress = Math.min((now - start) / TURN_SCORE_DURATION_MS, 1);
+      const value = Math.round(estimate + delta * progress);
+      setTurnScoreToast((current) => {
+        if (!current || current.id !== id) return current;
+        return { ...current, display: value };
+      });
+      if (progress < 1 && turnScoreRef.current?.id === id) {
+        scoreToastAnimRef.current = window.requestAnimationFrame(animate);
+      }
+    };
+
+    scoreToastAnimRef.current = window.requestAnimationFrame(animate);
+
     scoreToastRef.current = window.setTimeout(() => {
-      setTurnScoreToast((current) => (current?.id === id ? null : current));
-      scoreToastRef.current = null;
-    }, 2000);
+      if (turnScoreRef.current?.id !== id) return;
+      dismissTurnScore(true);
+    }, TURN_SCORE_DURATION_MS);
   }
 
   function showHint() {
@@ -564,11 +607,20 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   }, [gameOver]);
 
   useEffect(() => {
+    turnScoreRef.current = turnScoreToast;
+  }, [turnScoreToast]);
+
+  useEffect(() => {
     return () => {
       if (scoreToastRef.current) {
         window.clearTimeout(scoreToastRef.current);
         scoreToastRef.current = null;
       }
+      if (scoreToastAnimRef.current) {
+        window.cancelAnimationFrame(scoreToastAnimRef.current);
+        scoreToastAnimRef.current = null;
+      }
+      pendingAiAfterScoreRef.current = false;
     };
   }, []);
 
@@ -1223,7 +1275,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     const board = current.board.map((row) =>
       row.map((cell) => {
         if (cell.modifier && !cell.revealed) {
-          return { ...cell, triggered: true };
+          return { ...cell, modifier: null, triggered: true };
         }
         return cell;
       })
@@ -1233,7 +1285,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
 
 function confirmPlay() {
     if (!playModal || playModal.type !== "confirm") return;
-    commitTurn(playModal.words, playModal.points);
+    commitTurn(playModal.words, playModal.points, playModal.estimate);
   }
 
 function openSubmitModal() {
@@ -1364,7 +1416,7 @@ function openSubmitModal() {
     }, AI_DELAY_MS);
   }
 
-  function commitTurn(words: WordPlay[], points: number) {
+  function commitTurn(words: WordPlay[], points: number, estimate: number) {
     playButtonSound();
     const current = gameRef.current;
     if (!current) return;
@@ -1397,14 +1449,13 @@ function openSubmitModal() {
     setGame(nextGame);
     setSelectedTileId(null);
     setPlayModal(null);
-    showTurnScore(points);
     setHintCells([]);
     const nextScoreless = updateScoreless(points);
     const nextPassStreak = updatePassStreak("You", false);
     if (checkGameOver(nextGame, nextScoreless, nextStats, nextPassStreak)) return;
+    showTurnScore(estimate, points, true);
     setIsPlayerTurn(false);
     setTurn((t) => t + 1);
-    queueAiMove();
   }
 
   function passTurn() {
@@ -1886,14 +1937,14 @@ function openSubmitModal() {
       )}
 
       {turnScoreToast && (
-        <div className="turnScoreOverlay" onClick={dismissTurnScore} role="presentation">
+        <div className="turnScoreOverlay" onClick={() => dismissTurnScore(true)} role="presentation">
           <div
-            className="turnScoreTile"
+            className={`turnScoreTile ${turnScoreToast.isLower ? "low" : ""}`}
             style={{
               backgroundImage: `url(${tileBase})`,
             }}
           >
-            <div className="turnScoreValue">{turnScoreToast.points}</div>
+            <div className={`turnScoreValue ${turnScoreToast.isLower ? "low" : ""}`}>{turnScoreToast.display}</div>
             <div className="turnScoreLabel">Total</div>
           </div>
         </div>

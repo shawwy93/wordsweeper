@@ -41,7 +41,7 @@ function buildBatmanRack(bag: Tile[]) {
     }
     break;
   }
-  return { rack, bag: bagCopy };
+  return { rack: shuffle(rack), bag: bagCopy };
 }
 
 

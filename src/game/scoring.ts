@@ -30,7 +30,11 @@ export function scoreTurn(g: GameState, words: WordPlay[]): number {
       let letterScore = tile.value;
       let evilLetter = false;
 
-      if (isNew && boardCell && boardCell.modifier && !boardCell.triggered) {
+      if (boardCell?.modifier === "EVIL_WORD" && (isNew || boardCell.revealed)) {
+        evilWordCount += 1;
+      }
+
+      if (isNew && boardCell && boardCell.modifier && !boardCell.triggered && boardCell.modifier !== "EVIL_WORD") {
         switch (boardCell.modifier) {
           case "DL":
             letterScore *= 2;
@@ -46,9 +50,6 @@ export function scoreTurn(g: GameState, words: WordPlay[]): number {
             break;
           case "EVIL_LETTER":
             evilLetter = true;
-            break;
-          case "EVIL_WORD":
-            evilWordCount += 1;
             break;
           default:
             break;
