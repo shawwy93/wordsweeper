@@ -1556,9 +1556,6 @@ function openSubmitModal() {
               <IconButton label="Swap Tiles" onClick={swapRack} disabled={!canSwap}>
                 <IconSwap />
               </IconButton>
-              <IconButton label="Hint" onClick={showHint} disabled={!canHint}>
-                <IconHint />
-              </IconButton>
               <IconButton label="Pass" onClick={passTurn} disabled={!canInteract}>
                 <IconPass />
               </IconButton>
@@ -1718,6 +1715,19 @@ function openSubmitModal() {
                 <span className="iconLabel">Play</span>
               </button>
             </div>
+          </div>
+
+          <div className="desktopHintRow">
+            <button
+              className="iconButton compact"
+              type="button"
+              onClick={showHint}
+              disabled={!canHint}
+              aria-label="Hint"
+            >
+              <span className="iconGlyph"><IconHint /></span>
+              <span className="iconLabel">Hint</span>
+            </button>
           </div>
 
           <div className="tileStatus">

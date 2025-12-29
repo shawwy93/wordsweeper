@@ -952,6 +952,15 @@ body.gameBackground {
   gap: 6px;
 }
 
+.desktopHintRow {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 8px;
+}
+.desktopHintRow .iconButton {
+  min-width: 96px;
+}
+
 .tileStatus {
   display: flex;
   justify-content: space-between;
@@ -1401,7 +1410,7 @@ body.gameBackground {
   display: grid;
   height: 100%;
   padding: 12px;
-  padding-top: calc(12px + env(safe-area-inset-top));
+  padding-top: calc(18px + env(safe-area-inset-top));
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
   gap: 8px;
   grid-template-rows: auto auto auto auto auto;
@@ -1539,8 +1548,8 @@ body.gameBackground {
   padding-bottom: 0;
 }
 .mobileBoardFrame {
-  width: min(92vw, 48vh);
-  height: min(92vw, 48vh);
+  width: min(92vw, 50vh);
+  height: min(92vw, 50vh);
   border-radius: 0;
   padding: 0;
   background: transparent;
@@ -1629,7 +1638,7 @@ body.gameBackground {
 @media (max-width: 430px) {
   .mobileShell {
     padding: 10px;
-    padding-top: calc(10px + env(safe-area-inset-top));
+    padding-top: calc(14px + env(safe-area-inset-top));
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
     gap: 6px;
   }
@@ -1659,8 +1668,8 @@ body.gameBackground {
     font-size: 10px;
   }
   .mobileBoardFrame {
-    width: min(92vw, 44vh);
-    height: min(92vw, 44vh);
+    width: min(92vw, 46vh);
+    height: min(92vw, 46vh);
   }
   .mobileActionBar {
     grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1925,19 +1934,21 @@ body.gameBackground {
     background: #070c16 url("./assets/WordSweeperMobileGame.png") center / cover no-repeat;
   }
   .app {
-    padding: 0;
+    padding: 0px;
     background: transparent;
   }
   .screen {
     width: 100%;
     height: 100vh;
-    padding: 0;
+    padding:0;
   }
   .desktopShell {
     display: none;
+    
   }
   .mobileShell {
     display: grid;
+    padding-top:70px;
   }
   .menuHeaderSpacer {
     flex: 0.8;
@@ -1952,8 +1963,10 @@ body.gameBackground {
     font-size: 14px;
   }
   .modLabel {
+    left:45%;
     font-size: 7px;
-    padding: 1px 3px;
+    padding: 1px 1px;
+  
   }
   .boardTileValue {
     font-size: 8px;
