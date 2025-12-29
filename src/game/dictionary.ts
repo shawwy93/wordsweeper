@@ -3,10 +3,32 @@ import rawBlocked from "../assets/wordlist-blocked.txt?raw";
 
 const COMMON_SINGLE = new Set(["A", "I"]);
 const COMMON_TWO_LETTER = new Set([
-  "AM", "AN", "AS", "AT", "BE", "BY", "DO", "GO", "HE", "HI", "IF", "IN", "IS", "IT",
-  "ME", "MY", "NO", "OF", "OH", "OK", "ON", "OR", "OX", "SO", "TO", "UP", "US", "WE",
-  "YA", "YE", "YO", "MA", "PA", "RE", "ID",
+  "AA", "AB", "AD", "AE", "AG", "AH", "AI", "AL", "AM", "AN", "AR", "AS", "AT", "AW", "AX", "AY",
+  "BA", "BE", "BI", "BO", "BY",
+  "DA", "DE", "DO",
+  "ED", "EF", "EH", "EL", "EM", "EN", "ER", "ES", "ET", "EW", "EX",
+  "FA",
+  "GO",
+  "HA", "HE", "HI", "HM", "HO",
+  "ID", "IF", "IN", "IS", "IT",
+  "JO",
+  "KA", "KI",
+  "LA", "LI", "LO",
+  "MA", "ME", "MI", "MM", "MO", "MU", "MY",
+  "NA", "NE", "NO", "NU",
+  "OD", "OE", "OF", "OH", "OI", "OM", "ON", "OP", "OR", "OS", "OW", "OX", "OY",
+  "PA", "PE", "PI",
+  "QI",
+  "RE",
+  "SH", "SI", "SO",
+  "TA", "TE", "TI", "TO",
+  "UH", "UM", "UN", "UP", "US", "UT",
+  "WE", "WO",
+  "XI", "XU",
+  "YA", "YE", "YO",
+  "ZA",
 ]);
+;
 
 
 type RackWord = {
