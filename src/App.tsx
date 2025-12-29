@@ -12,10 +12,18 @@ type AudioSettings = { ui: boolean; game: boolean };
 type MusicSettings = { muted: boolean; volume: number };
 
 export default function App() {
+  const initialResume = (() => {
+    const saved = localStorage.getItem("hh_saved_game");
+    const last = localStorage.getItem("hh_active_screen");
+    return Boolean(saved) && last === "game";
+  })();
   const [screen, setScreen] = useState<Screen>(() => {
     const seenHow = localStorage.getItem("hh_seenHow") === "1";
+    if (initialResume) return "game";
     return seenHow ? "menu" : "how";
   });
+  const [settingsReturn, setSettingsReturn] = useState<Screen>("menu");
+  const [resumeGame, setResumeGame] = useState(initialResume);
   const [difficulty, setDifficulty] = useState<Difficulty>(() => {
     const raw = localStorage.getItem("hh_difficulty");
     if (raw === "easy" || raw === "normal" || raw === "hard") return raw;
@@ -61,6 +69,10 @@ export default function App() {
   }, [musicSettings]);
 
   useEffect(() => {
+    localStorage.setItem("hh_active_screen", screen);
+  }, [screen]);
+
+  useEffect(() => {
     function tryStart() {
       if (musicStartedRef.current) return;
       const audio = musicRef.current;
@@ -91,6 +103,28 @@ export default function App() {
       window.removeEventListener("keydown", tryStart);
     };
   }, []);
+  function openSettings(from: Screen) {
+    setSettingsReturn(from);
+    setScreen("settings");
+  }
+
+  function handleSettingsBack() {
+    setScreen(settingsReturn);
+    if (settingsReturn === "game") {
+      setResumeGame(true);
+    }
+  }
+
+  function startNewGame() {
+    setResumeGame(false);
+    setScreen("game");
+  }
+
+  function exitToMenu() {
+    setResumeGame(false);
+    setScreen("menu");
+  }
+
   const settings = useMemo(
     () => ({
       difficulty,
@@ -118,12 +152,10 @@ export default function App() {
     <div className="app">
       {screen === "menu" && (
         <MenuScreen
-          onPlay={() => setScreen("game")}
+          onPlay={startNewGame}
           onHow={() => setScreen("how")}
-          onSettings={() => setScreen("settings")}
+          onSettings={() => openSettings("menu")}
           onStats={() => setScreen("stats")}
-          difficulty={settings.difficulty}
-          setDifficulty={settings.setDifficulty}
           audio={settings.audio}
         />
       )}
@@ -132,7 +164,9 @@ export default function App() {
         <GameScreen
           difficulty={settings.difficulty}
           audio={settings.audio}
-          onExit={() => setScreen("menu")}
+          onExit={exitToMenu}
+          onSettings={() => openSettings("game")}
+          resume={resumeGame}
         />
       )}
 
@@ -147,13 +181,11 @@ export default function App() {
 
       {screen === "settings" && (
         <SettingsScreen
-          difficulty={settings.difficulty}
-          setDifficulty={settings.setDifficulty}
           audio={settings.audio}
           setAudio={settings.setAudio}
           music={settings.music}
           setMusic={settings.setMusic}
-          onBack={() => setScreen("menu")}
+          onBack={handleSettingsBack}
         />
       )}
 

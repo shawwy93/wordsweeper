@@ -14,6 +14,7 @@ export type AiMove = {
   score: number;
   maxWordLength: number;
   tileCount: number;
+  evilHits: number;
 };
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -239,16 +240,22 @@ function chooseNormal(moves: AiMove[]) {
 }
 
 function chooseEasy(moves: AiMove[]) {
-  const sorted = [...moves].sort((a, b) => b.score - a.score);
+  const withEvil = moves.filter((move) => move.evilHits > 0);
+  const pool = withEvil.length > 0 ? withEvil : moves;
+  const sorted = [...pool].sort((a, b) => {
+    if (b.evilHits != a.evilHits) return b.evilHits - a.evilHits;
+    if (a.maxWordLength != b.maxWordLength) return a.maxWordLength - b.maxWordLength;
+    return a.score - b.score;
+  });
   const short = sorted.filter((move) => move.maxWordLength <= 4);
   const base = short.length > 0 ? short : sorted;
-  const cap = Math.min(base.length, 10);
+  const cap = Math.min(base.length, 12);
   let pickFrom = base.slice(0, cap);
-  if (pickFrom.length > 2) {
+  if (pickFrom.length > 3) {
     const start = Math.floor(pickFrom.length * 0.4);
     pickFrom = pickFrom.slice(start);
   }
-  if (Math.random() < 0.25) {
+  if (Math.random() < 0.2) {
     pickFrom = base;
   }
   return pickFrom[Math.floor(Math.random() * pickFrom.length)];
@@ -301,12 +308,21 @@ export function chooseAiMove(g: GameState): AiMove | null {
     const result = validateMove(sim);
     if (!result.ok) return;
     const score = scoreWithRevealed(sim, result.words);
+    let evilHits = 0;
+    for (const p of placements) {
+      const cell = g.board[p.y]?.[p.x];
+      if (!cell || cell.triggered) continue;
+      if (cell.modifier === "EVIL_LETTER" || cell.modifier === "EVIL_WORD") {
+        evilHits += 1;
+      }
+    }
     const move = {
       placements: placements.map((p) => ({ ...p })),
       words: result.words,
       score,
       maxWordLength: maxWordLength(result.words),
       tileCount: placements.length,
+      evilHits,
     };
     if (isBetterHard(move, best)) best = move;
     if (keepCandidates) candidates.push(move);

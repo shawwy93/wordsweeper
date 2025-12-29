@@ -21,6 +21,7 @@ const TOTAL_TILES = createTileBag().length;
 const AI_DELAY_MS = 650;
 const TOUCH_DRAG_THRESHOLD = 6;
 const MAX_SWAPS = 3;
+const PASS_STREAK_LIMIT = 5;
 
 type PlayModalState =
   | { type: "confirm"; words: WordPlay[]; points: number }
@@ -58,6 +59,34 @@ type GameOverState = {
   scores: { player: number; ai: number };
   stats: MatchStats;
 };
+
+type SavedGameState = {
+  version: number;
+  game: GameState;
+  turn: number;
+  isPlayerTurn: boolean;
+  scorelessTurns: number;
+  passStreak: PassStreak;
+  matchStats: MatchStats;
+  moveHistory: MoveEntry[];
+  swapsUsed: number;
+  showHiddenHints: boolean;
+};
+
+const SAVE_KEY = "hh_saved_game";
+
+function loadSavedGame(): SavedGameState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SavedGameState;
+    if (!parsed || !parsed.game || !parsed.game.board) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 type BlankPick = {
   tileId: string;
@@ -311,24 +340,25 @@ function clearPlayerPlacements(g: GameState) {
   };
 }
 
-export default function GameScreen(props: { difficulty: Difficulty; audio: { ui: boolean; game: boolean }; onExit: () => void }) {
-  const [game, setGame] = useState(() => createNewGame(props.difficulty));
+export default function GameScreen(props: { difficulty: Difficulty; audio: { ui: boolean; game: boolean }; onExit: () => void; onSettings: () => void; resume: boolean }) {
+  const savedState = props.resume ? loadSavedGame() : null;
+  const [game, setGame] = useState(() => savedState?.game ?? createNewGame(props.difficulty));
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
-  const [showHiddenHints, setShowHiddenHints] = useState(false);
-  const [turn, setTurn] = useState(1);
+  const [showHiddenHints, setShowHiddenHints] = useState(() => savedState?.showHiddenHints ?? false);
+  const [turn, setTurn] = useState(() => savedState?.turn ?? 1);
   const [playModal, setPlayModal] = useState<PlayModalState>(null);
-  const [isPlayerTurn, setIsPlayerTurn] = useState(true);
+  const [isPlayerTurn, setIsPlayerTurn] = useState(() => savedState?.isPlayerTurn ?? true);
   const [aiBusy, setAiBusy] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [moveHistory, setMoveHistory] = useState<MoveEntry[]>([]);
+  const [moveHistory, setMoveHistory] = useState<MoveEntry[]>(() => savedState?.moveHistory ?? []);
   const [blankPicker, setBlankPicker] = useState<BlankPick | null>(null);
   const [gameOver, setGameOver] = useState<GameOverState | null>(null);
-  const [scorelessTurns, setScorelessTurns] = useState(0);
-  const [matchStats, setMatchStats] = useState<MatchStats>({ ...EMPTY_MATCH_STATS });
+  const [scorelessTurns, setScorelessTurns] = useState(() => savedState?.scorelessTurns ?? 0);
+  const [matchStats, setMatchStats] = useState<MatchStats>(() => savedState?.matchStats ?? { ...EMPTY_MATCH_STATS });
   const [touchDrag, setTouchDrag] = useState<TouchDrag | null>(null);
-  const [passStreak, setPassStreak] = useState<PassStreak>({ ...EMPTY_PASS_STREAK });
-  const [swapsUsed, setSwapsUsed] = useState(0);
+  const [passStreak, setPassStreak] = useState<PassStreak>(() => savedState?.passStreak ?? { ...EMPTY_PASS_STREAK });
+  const [swapsUsed, setSwapsUsed] = useState(() => savedState?.swapsUsed ?? 0);
   const pendingTouchRef = useRef<PendingTouchDrag | null>(null);
   const aiQueuedRef = useRef(false);
   const gameRef = useRef<GameState>(game);
@@ -399,12 +429,42 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   }, []);
 
   useEffect(() => {
-    recordGameStart();
+    if (!savedState) {
+      recordGameStart();
+    }
   }, []);
 
   useEffect(() => {
     gameRef.current = game;
   }, [game]);
+
+  useEffect(() => {
+    if (!savedState) return;
+    if (!isPlayerTurn && !aiBusy && !gameOver) {
+      queueAiMove();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const snapshot: SavedGameState = {
+      version: 1,
+      game,
+      turn,
+      isPlayerTurn,
+      scorelessTurns,
+      passStreak,
+      matchStats,
+      moveHistory,
+      swapsUsed,
+      showHiddenHints,
+    };
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot));
+    } catch {
+      // ignore write errors
+    }
+  }, [game, turn, isPlayerTurn, scorelessTurns, passStreak, matchStats, moveHistory, swapsUsed, showHiddenHints]);
 
   useEffect(() => {
     matchStatsRef.current = matchStats;
@@ -605,12 +665,12 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     nextPassStreak: PassStreak = passStreakRef.current
   ) {
     if (gameOverRef.current) return true;
-    if (nextPassStreak.player >= 3) {
-      handleGameOver(nextGame, "You passed three turns in a row.", stats);
+    if (nextPassStreak.player >= PASS_STREAK_LIMIT) {
+      handleGameOver(nextGame, `You passed ${PASS_STREAK_LIMIT} turns in a row.`, stats);
       return true;
     }
-    if (nextPassStreak.ai >= 3) {
-      handleGameOver(nextGame, "AI passed three turns in a row.", stats);
+    if (nextPassStreak.ai >= PASS_STREAK_LIMIT) {
+      handleGameOver(nextGame, `AI passed ${PASS_STREAK_LIMIT} turns in a row.`, stats);
       return true;
     }
     const bagEmpty = nextGame.bag.length === 0;
@@ -779,6 +839,12 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   function handleExit() {
     playButtonSound();
     props.onExit();
+  }
+
+  function handleSettings() {
+    playButtonSound();
+    setShowMoreMenu(false);
+    props.onSettings();
   }
 
   function openHistory() {
@@ -1290,7 +1356,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
           <div className="panelCard">
             <div className="panelTitle">Session</div>
             <ScorePanel scores={game.scores} bagCount={game.bag.length} />
-            <div className="small">Difficulty: {props.difficulty.toUpperCase()}</div>
+            <div className="small">Difficulty: {game.difficulty.toUpperCase()}</div>
             <div className="small">Board: 11x11 | Turn {turn}</div>
             <div className="small">{isPlayerTurn ? "Your move" : "AI move"}</div>
           </div>
@@ -1490,7 +1556,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
             <div className="mobileTurnInfo">
               <div className="mobileTurnLabel">{isPlayerTurn ? "Your turn" : "AI thinking"}</div>
               <div className="mobileTurnCount">Turn {turn}</div>
-              <div className="mobileDifficulty">{props.difficulty.toUpperCase()}</div>
+              <div className="mobileDifficulty">{game.difficulty.toUpperCase()}</div>
             </div>
             <div className="mobilePlayerBlock ai">
               <div className="mobileAvatar ai">AI</div>
@@ -1726,6 +1792,9 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
             <div className="moreSection">
               <button className="moreActionButton" type="button" onClick={handleExit}>
                 Home
+              </button>
+              <button className="moreActionButton" type="button" onClick={handleSettings}>
+                Settings
               </button>
               <button className="moreActionButton danger" type="button" onClick={resignGame}>
                 Resign

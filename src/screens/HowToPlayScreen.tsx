@@ -28,8 +28,8 @@ export default function HowToPlayScreen(props: { onBack: () => void }) {
             </p>
             <p>
               Game over happens when the bag is empty and someone runs out of tiles,
-              after three scoreless turns (passes or swaps) once scoring starts, or
-              if a player resigns.
+              after three scoreless turns once scoring starts, after five passes in a row,
+              or if a player resigns.
             </p>
           </div>
         </div>
