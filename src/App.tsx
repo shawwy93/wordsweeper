@@ -207,6 +207,8 @@ export default function App() {
       )}
 
       {screen === "stats" && <StatsScreen onBack={() => setScreen("menu")} />}
+
+      <footer className="appFooter">(c) 2026 Word Sweeper</footer>
     </div>
   );
 }

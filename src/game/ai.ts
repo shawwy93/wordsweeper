@@ -1,6 +1,6 @@
 import { BOARD_SIZE, CENTER } from "./constants";
 import { DICTIONARY, isWord } from "./dictionary";
-import { GameState, PlacedTile } from "./types";
+import { GameState, PlacedTile, Tile } from "./types";
 import { validateMove, WordPlay } from "./validation";
 
 type TrieNode = {
@@ -268,6 +268,11 @@ function chooseEasy(moves: AiMove[]) {
   return trimmed[Math.floor(Math.random() * trimmed.length)];
 }
 
+
+export function findBestMoveForRack(g: GameState, rack: Tile[]) {
+  const snapshot: GameState = { ...g, aiRack: rack, difficulty: "hard" };
+  return chooseAiMove(snapshot);
+}
 
 export function chooseAiMove(g: GameState): AiMove | null {
   if (g.aiRack.length === 0) return null;

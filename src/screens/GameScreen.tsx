@@ -6,7 +6,7 @@ import { Difficulty, PlacedTile, Tile, GameState } from "../game/types";
 import { assistPlayerRack, createNewGame, rebalanceRack } from "../game/state";
 import { applyRevealThisTurn, scoreTurn } from "../game/scoring";
 import { createTileBag, RACK_SIZE } from "../game/constants";
-import { chooseAiMove, findHintMove } from "../game/ai";
+import { chooseAiMove, findBestMoveForRack, findHintMove } from "../game/ai";
 import { validateMove, type WordPlay } from "../game/validation";
 import { recordGameResult, recordGameStart, recordMoveStats } from "../game/stats";
 import tileBase from "../assets/tile-base.png";
@@ -30,6 +30,9 @@ type PlayModalState =
   | null;
 
 type HintCell = { x: number; y: number };
+
+type PowerUp = "auto" | "reveal" | "overdraw";
+type PowerUpMode = "reveal" | null;
 
 type TurnScoreToast = { id: number; points: number; estimate: number; display: number; isLower: boolean };
 
@@ -76,6 +79,8 @@ type SavedGameState = {
   moveHistory: MoveEntry[];
   swapsUsed: number;
   showHiddenHints: boolean;
+  powerUpUsed: PowerUp | null;
+  overdrawActive: boolean;
 };
 
 const SAVE_KEY = "hh_saved_game";
@@ -176,6 +181,29 @@ function applyAiPlacements(g: GameState, placements: PlacedTile[]) {
     placedThisTurn: placements,
   };
 }
+
+function applyPlayerPlacements(g: GameState, placements: PlacedTile[]) {
+  const newBoard = g.board.map((row) => row.map((c) => ({ ...c })));
+  const newRack = [...g.rack];
+
+  for (const p of placements) {
+    const cell = newBoard[p.y]?.[p.x];
+    if (!cell || cell.tileId) return null;
+    const idx = newRack.findIndex((t) => t.id === p.tileId);
+    if (idx === -1) return null;
+    const [tile] = newRack.splice(idx, 1);
+    cell.tileId = tile.id;
+    cell.letterOverride = p.letterOverride;
+  }
+
+  return {
+    ...g,
+    board: newBoard,
+    rack: newRack,
+    placedThisTurn: placements,
+  };
+}
+
 
 function IconMenu() {
   return (
@@ -383,6 +411,10 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   const [aiBusy, setAiBusy] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showPowerUps, setShowPowerUps] = useState(false);
+  const [powerUpMode, setPowerUpMode] = useState<PowerUpMode>(null);
+  const [powerUpUsed, setPowerUpUsed] = useState<PowerUp | null>(() => savedState?.powerUpUsed ?? null);
+  const [overdrawActive, setOverdrawActive] = useState(() => savedState?.overdrawActive ?? false);
   const [hintCells, setHintCells] = useState<HintCell[]>([]);
   const [turnScoreToast, setTurnScoreToast] = useState<TurnScoreToast | null>(null);
   const [moveHistory, setMoveHistory] = useState<MoveEntry[]>(() => savedState?.moveHistory ?? []);
@@ -521,6 +553,119 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     }, TURN_SCORE_DURATION_MS);
   }
 
+
+  function applyOverdrawPenalty(rack: Tile[]) {
+    if (!overdrawActive) return rack;
+    setOverdrawActive(false);
+    if (rack.length === 0) return rack;
+    const maxValue = Math.max(...rack.map((tile) => tile.value));
+    const candidates = rack.filter((tile) => tile.value === maxValue);
+    const drop = candidates[Math.floor(Math.random() * candidates.length)];
+    return rack.filter((tile) => tile.id !== drop.id);
+  }
+
+  function openPowerUps() {
+    playButtonSound();
+    setShowMoreMenu(false);
+    setShowPowerUps(true);
+  }
+
+  function closePowerUps() {
+    playButtonSound();
+    setShowPowerUps(false);
+  }
+
+  function cancelPowerUpMode() {
+    playButtonSound();
+    setPowerUpMode(null);
+  }
+
+  function activateAutoPlay() {
+    if (!canUsePowerUp) return;
+    const current = gameRef.current;
+    if (!current) return;
+    setShowPowerUps(false);
+    const move = findBestMoveForRack(current, current.rack);
+    setPowerUpUsed("auto");
+    if (!move) {
+      passTurn();
+      return;
+    }
+    const sim = applyPlayerPlacements(current, move.placements);
+    if (!sim) {
+      passTurn();
+      return;
+    }
+    const validation = validateMove(sim);
+    if (!validation.ok) {
+      passTurn();
+      return;
+    }
+    const points = scoreTurn(sim, validation.words);
+    const estimate = estimateScore(sim, validation.words);
+    commitAutoPlay(sim, validation.words, points, estimate);
+  }
+
+  function activateForcedReveal() {
+    if (!canUsePowerUp) return;
+    setShowPowerUps(false);
+    setPowerUpMode("reveal");
+  }
+
+  function activateOverdraw() {
+    if (!canUsePowerUp) return;
+    const current = gameRef.current;
+    if (!current || current.bag.length === 0) return;
+    const drawCount = Math.min(3, current.bag.length);
+    const extra = current.bag.slice(0, drawCount);
+    const nextGame = {
+      ...current,
+      rack: [...current.rack, ...extra],
+      bag: current.bag.slice(drawCount),
+    };
+    setGame(nextGame);
+    setPowerUpUsed("overdraw");
+    setOverdrawActive(true);
+    setShowPowerUps(false);
+  }
+
+  function applyForcedReveal(cx: number, cy: number) {
+    if (!canInteract || powerUpUsed) return;
+    const current = gameRef.current;
+    if (!current) return;
+    const now = Date.now();
+    const nextBoard = current.board.map((row) => row.map((c) => ({ ...c })));
+    const cells: Array<{ x: number; y: number; cell: GameState["board"][number][number] }> = [];
+
+    for (let y = cy - 1; y <= cy + 1; y++) {
+      for (let x = cx - 1; x <= cx + 1; x++) {
+        const cell = nextBoard[y]?.[x];
+        if (!cell) continue;
+        if (cell.modifier && !cell.revealed) {
+          cell.revealed = true;
+          cell.revealedAt = now;
+        }
+        cells.push({ x, y, cell });
+      }
+    }
+
+    const candidates = cells.filter((entry) => !entry.cell.tileId);
+    const pool = candidates.length > 0 ? candidates : cells;
+    if (pool.length > 0) {
+      const pick = pool[Math.floor(Math.random() * pool.length)].cell;
+      pick.modifier = "EVIL_WORD";
+      pick.revealed = true;
+      pick.revealedAt = now;
+      pick.triggered = false;
+    }
+
+    setGame({ ...current, board: nextBoard, lastRevealAnim: now });
+    setPowerUpUsed("reveal");
+    setPowerUpMode(null);
+    setSelectedTileId(null);
+    setHintCells([]);
+  }
+
   function showHint() {
     if (!canInteract || placedThisTurn.length > 0) return;
     playButtonSound();
@@ -583,13 +728,15 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
       moveHistory,
       swapsUsed,
       showHiddenHints,
+      powerUpUsed,
+      overdrawActive,
     };
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot));
     } catch {
       // ignore write errors
     }
-  }, [game, turn, isPlayerTurn, scorelessTurns, passStreak, matchStats, moveHistory, swapsUsed, showHiddenHints]);
+  }, [game, turn, isPlayerTurn, scorelessTurns, passStreak, matchStats, moveHistory, swapsUsed, showHiddenHints, powerUpUsed, overdrawActive]);
 
   useEffect(() => {
     matchStatsRef.current = matchStats;
@@ -693,6 +840,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
 
   const canInteract = isPlayerTurn && !aiBusy && !gameOver;
   const canPlay = canInteract && placedThisTurn.length > 0;
+  const canUsePowerUp = canInteract && !powerUpUsed && placedThisTurn.length === 0;
   const selectedRackTile = selectedTileId ? game.rack.some((t) => t.id === selectedTileId) : false;
   const canSwap =
     canInteract &&
@@ -801,6 +949,8 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     setBlankPicker(null);
     setShowMoreMenu(false);
     setShowHistory(false);
+    setShowPowerUps(false);
+    setPowerUpMode(null);
     setTouchDrag(null);
     dismissTurnScore();
     pendingTouchRef.current = null;
@@ -1048,6 +1198,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
 
   function placeTileAt(tileId: string, x: number, y: number, letterOverride?: string) {
     if (!canInteract) return;
+    if (powerUpMode === "reveal") return;
     const tileMeta = game.tilesById[tileId];
     let didPlace = false;
     const alreadyPlaced = game.placedThisTurn.find((p) => p.tileId === tileId);
@@ -1142,6 +1293,10 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
 
   function onBoardDrop(tileId: string, source: "rack" | "board", x: number, y: number) {
     if (!canInteract) return;
+    if (powerUpMode === "reveal") {
+      applyForcedReveal(x, y);
+      return;
+    }
     const current = gameRef.current;
     if (!current) return;
     const cell = current.board[y]?.[x];
@@ -1174,6 +1329,10 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
 
   function onTapSquare(x: number, y: number) {
     if (!canInteract) return;
+    if (powerUpMode === "reveal") {
+      applyForcedReveal(x, y);
+      return;
+    }
     if (!selectedTileId) return;
     placeTileAt(selectedTileId, x, y);
   }
@@ -1251,9 +1410,10 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     newBag.splice(insertIndex, 0, swappedOut);
     const newRack = [...current.rack];
     newRack[tileIndex] = incoming;
+    const rackAfterPenalty = applyOverdrawPenalty(newRack);
     const nextGame = {
       ...current,
-      rack: newRack,
+      rack: rackAfterPenalty,
       bag: newBag,
       placedThisTurn: [],
       lastPlayedIds: [],
@@ -1417,6 +1577,45 @@ function openSubmitModal() {
     }, AI_DELAY_MS);
   }
 
+  function commitAutoPlay(sim: GameState, words: WordPlay[], points: number, estimate: number) {
+    recordMoveStats({
+      player: "You",
+      words: words.length,
+      points,
+      tiles: sim.placedThisTurn.length,
+    });
+    const nextStats = recordMatchMove({
+      player: "You",
+      words: words.length,
+      points,
+      tiles: sim.placedThisTurn.length,
+    });
+    recordMove("You", words, points);
+    const { nextBoard } = applyRevealThisTurn(sim);
+    const rackAfterPenalty = applyOverdrawPenalty(sim.rack);
+    const refill = refillRack(rackAfterPenalty, sim.bag, sim.difficulty);
+    const nextGame = {
+      ...sim,
+      board: nextBoard,
+      rack: refill.rack,
+      bag: refill.bag,
+      lastPlayedIds: collectWordTileIds(words),
+      scores: { ...sim.scores, player: sim.scores.player + points },
+      placedThisTurn: [],
+      lastRevealAnim: Date.now(),
+    };
+    setGame(nextGame);
+    setSelectedTileId(null);
+    setPlayModal(null);
+    setHintCells([]);
+    const nextScoreless = updateScoreless(points);
+    const nextPassStreak = updatePassStreak("You", false);
+    if (checkGameOver(nextGame, nextScoreless, nextStats, nextPassStreak)) return;
+    showTurnScore(estimate, points, true);
+    setIsPlayerTurn(false);
+    setTurn((t) => t + 1);
+  }
+
   function commitTurn(words: WordPlay[], points: number, estimate: number) {
     playButtonSound();
     const current = gameRef.current;
@@ -1435,7 +1634,8 @@ function openSubmitModal() {
     });
     recordMove("You", words, points);
     const { nextBoard } = applyRevealThisTurn(current);
-    const refill = refillRack(current.rack, current.bag, current.difficulty);
+    const rackAfterPenalty = applyOverdrawPenalty(current.rack);
+    const refill = refillRack(rackAfterPenalty, current.bag, current.difficulty);
     const lastPlayedIds = collectWordTileIds(words);
     const nextGame = {
       ...current,
@@ -1465,14 +1665,16 @@ function openSubmitModal() {
     const current = gameRef.current;
     if (!current) return;
     const nextGame = { ...clearPlayerPlacements(current), lastPlayedIds: [] };
-    setGame(nextGame);
+    const rackAfterPenalty = applyOverdrawPenalty(nextGame.rack);
+    const penalizedGame = { ...nextGame, rack: rackAfterPenalty };
+    setGame(penalizedGame);
     setSelectedTileId(null);
     recordMoveStats({ player: "You", words: 0, points: 0, tiles: 0 });
     const nextStats = recordMatchMove({ player: "You", words: 0, points: 0, tiles: 0 });
     recordMove("You", [], 0, "pass");
     const nextScoreless = updateScoreless(0);
     const nextPassStreak = updatePassStreak("You", true);
-    if (checkGameOver(nextGame, nextScoreless, nextStats, nextPassStreak)) return;
+    if (checkGameOver(penalizedGame, nextScoreless, nextStats, nextPassStreak)) return;
     setIsPlayerTurn(false);
     setTurn((t) => t + 1);
     queueAiMove();
@@ -1497,6 +1699,10 @@ function openSubmitModal() {
     setIsPlayerTurn(true);
     setAiBusy(false);
     setShowHistory(false);
+    setShowPowerUps(false);
+    setPowerUpMode(null);
+    setPowerUpUsed(null);
+    setOverdrawActive(false);
     setHintCells([]);
     dismissTurnScore();
     setMoveHistory([]);
@@ -1556,6 +1762,9 @@ function openSubmitModal() {
               <IconButton label="Swap Tiles" onClick={swapRack} disabled={!canSwap}>
                 <IconSwap />
               </IconButton>
+              <IconButton label={powerUpUsed ? "Power-up Used" : "Power-ups"} onClick={openPowerUps} disabled={gameOver}>
+                <IconHint />
+              </IconButton>
               <IconButton label="Pass" onClick={passTurn} disabled={!canInteract}>
                 <IconPass />
               </IconButton>
@@ -1601,6 +1810,14 @@ function openSubmitModal() {
               <div className="boardHint">
                 Tap a tile, then a square to place. Submit flips hidden modifiers.
               </div>
+              {powerUpMode === "reveal" && (
+                <div className="boardHint powerMode">
+                  Tap a square to reveal nearby modifiers (3x3).
+                  <button type="button" className="powerCancel" onClick={cancelPowerUpMode}>
+                    Cancel
+                  </button>
+                </div>
+              )}
               <div className="chipRow">
                 <span className="chip chipPassive">Center = START</span>
                 <button
@@ -1774,6 +1991,15 @@ function openSubmitModal() {
             <span>Moves</span>
           </button>
         </div>
+
+        {powerUpMode === "reveal" && (
+          <div className="powerModeBanner">
+            <span>Tap a square to reveal nearby modifiers (3x3).</span>
+            <button type="button" className="powerCancel" onClick={cancelPowerUpMode}>
+              Cancel
+            </button>
+          </div>
+        )}
 
         <div className="mobileBoardArea">
           <div className={`mobileBoardFrame ${placedThisTurn.length > 0 ? "boardPlacing" : ""}`}>
@@ -2020,8 +2246,60 @@ function openSubmitModal() {
               <button className="moreActionButton" type="button" onClick={handleSettings}>
                 Settings
               </button>
+              <button className="moreActionButton" type="button" onClick={openPowerUps}>
+                {powerUpUsed ? "Power-up Used" : "Power-ups"}
+              </button>
               <button className="moreActionButton danger" type="button" onClick={resignGame}>
                 Resign
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPowerUps && (
+        <div className="powerOverlay" onClick={closePowerUps} role="presentation">
+          <div className="powerCard" onClick={(event) => event.stopPropagation()}>
+            <div className="powerHeader">
+              <div>Power-ups</div>
+              <button className="iconButton tiny" type="button" onClick={closePowerUps} aria-label="Close">
+                <span className="iconGlyph">X</span>
+              </button>
+            </div>
+            <div className="powerNotice">Use one per match. Choosing one locks the others.</div>
+            {powerUpUsed && (
+              <div className="powerUsed">Power-up used: {powerUpUsed === "auto" ? "Auto Play" : powerUpUsed === "reveal" ? "Forced Reveal" : "Overdraw"}</div>
+            )}
+            <div className="powerList">
+              <button
+                className="powerItem"
+                type="button"
+                onClick={activateAutoPlay}
+                disabled={!canUsePowerUp}
+              >
+                <div className="powerName">Auto Play</div>
+                <div className="powerDesc">Automatically plays the highest-scoring word from your rack.</div>
+                <div className="powerRisk">Downside: you lose placement control; may hit evil tiles.</div>
+              </button>
+              <button
+                className="powerItem"
+                type="button"
+                onClick={activateForcedReveal}
+                disabled={!canUsePowerUp}
+              >
+                <div className="powerName">Forced Reveal</div>
+                <div className="powerDesc">Reveal a 3x3 area of hidden modifiers.</div>
+                <div className="powerRisk">Downside: one revealed square becomes an evil word tile.</div>
+              </button>
+              <button
+                className="powerItem"
+                type="button"
+                onClick={activateOverdraw}
+                disabled={!canUsePowerUp || game.bag.length === 0}
+              >
+                <div className="powerName">Overdraw</div>
+                <div className="powerDesc">Draw +3 tiles this turn (rack can exceed the limit).</div>
+                <div className="powerRisk">Downside: highest-value unused tile is destroyed after your turn.</div>
               </button>
             </div>
           </div>
