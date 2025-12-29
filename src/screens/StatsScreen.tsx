@@ -1,9 +1,13 @@
 import Button from "../components/Button";
 import TopBar from "../components/TopBar";
+import { computeLevelProgress } from "../progression/leveling";
+import { loadProgression } from "../progression/storage";
 import { loadStats, resetStats } from "../game/stats";
 
 export default function StatsScreen(props: { onBack: () => void }) {
   const s = loadStats();
+  const progression = loadProgression();
+  const levelInfo = computeLevelProgress(progression.totalXP);
 
   function handleReset() {
     resetStats();
@@ -16,6 +20,18 @@ export default function StatsScreen(props: { onBack: () => void }) {
         <TopBar title="Stats" right={<Button onClick={props.onBack}>Back</Button>} />
         <div style={{ padding: 14 }}>
           <div className="scorePanel card" style={{ background: "transparent", boxShadow: "none" }}>
+            <div className="scoreRow">
+              <div className="kv">Level</div>
+              <div className="vv">{levelInfo.level}</div>
+            </div>
+            <div className="scoreRow">
+              <div className="kv">Total XP</div>
+              <div className="vv">{progression.totalXP}</div>
+            </div>
+            <div className="scoreRow">
+              <div className="kv">XP to next level</div>
+              <div className="vv">{Math.max(levelInfo.target - levelInfo.progress, 0)}</div>
+            </div>
             <div className="scoreRow">
               <div className="kv">Games started</div>
               <div className="vv">{s.gamesStarted}</div>

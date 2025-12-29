@@ -9,6 +9,8 @@ import { createTileBag, RACK_SIZE } from "../game/constants";
 import { chooseAiMove, findBestMoveForRack, findHintMove } from "../game/ai";
 import { validateMove, type WordPlay } from "../game/validation";
 import { recordGameResult, recordGameStart, recordMoveStats } from "../game/stats";
+import { computeLevelProgress, computeXpGain } from "../progression/leveling";
+import { loadProgression, saveProgression } from "../progression/storage";
 import tileBase from "../assets/tile-base.png";
 import autoplayIcon from "../assets/autoplayIcon.png";
 import overdrawIcon from "../assets/overdrawIcon.png";
@@ -69,6 +71,10 @@ type GameOverState = {
   reason: string;
   scores: { player: number; ai: number };
   stats: MatchStats;
+  xpGained: number;
+  levelBefore: number;
+  levelAfter: number;
+  totalXP: number;
 };
 
 type SavedGameState = {
@@ -84,6 +90,7 @@ type SavedGameState = {
   showHiddenHints: boolean;
   powerUpUsed: PowerUp | null;
   overdrawActive: boolean;
+  playerReveals: number;
 };
 
 const SAVE_KEY = "hh_saved_game";
@@ -426,6 +433,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   const [powerUpMode, setPowerUpMode] = useState<PowerUpMode>(null);
   const [powerUpUsed, setPowerUpUsed] = useState<PowerUp | null>(() => savedState?.powerUpUsed ?? null);
   const [overdrawActive, setOverdrawActive] = useState(() => savedState?.overdrawActive ?? false);
+  const [playerReveals, setPlayerReveals] = useState(() => savedState?.playerReveals ?? 0);
   const [hintCells, setHintCells] = useState<HintCell[]>([]);
   const [turnScoreToast, setTurnScoreToast] = useState<TurnScoreToast | null>(null);
   const [moveHistory, setMoveHistory] = useState<MoveEntry[]>(() => savedState?.moveHistory ?? []);
@@ -442,6 +450,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   const matchStatsRef = useRef<MatchStats>(matchStats);
   const scorelessRef = useRef(scorelessTurns);
   const passStreakRef = useRef<PassStreak>(passStreak);
+  const playerRevealsRef = useRef(playerReveals);
   const gameOverRef = useRef(gameOver);
   const scoreToastRef = useRef<number | null>(null);
   const scoreToastAnimRef = useRef<number | null>(null);
@@ -646,6 +655,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     if (!current) return;
     const now = Date.now();
     const nextBoard = current.board.map((row) => row.map((c) => ({ ...c })));
+    let revealCount = 0;
     const cells: Array<{ x: number; y: number; cell: GameState["board"][number][number] }> = [];
 
     for (let y = cy - 1; y <= cy + 1; y++) {
@@ -655,6 +665,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
         if (cell.modifier && !cell.revealed) {
           cell.revealed = true;
           cell.revealedAt = now;
+          revealCount += 1;
         }
         cells.push({ x, y, cell });
       }
@@ -664,17 +675,31 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     const pool = candidates.length > 0 ? candidates : cells;
     if (pool.length > 0) {
       const pick = pool[Math.floor(Math.random() * pool.length)].cell;
+      const wasRevealed = pick.revealed;
       pick.modifier = "EVIL_WORD";
-      pick.revealed = true;
-      pick.revealedAt = now;
+      if (!wasRevealed) {
+        pick.revealed = true;
+        pick.revealedAt = now;
+        revealCount += 1;
+      } else {
+        pick.revealedAt = now;
+      }
       pick.triggered = false;
     }
 
     setGame({ ...current, board: nextBoard, lastRevealAnim: now });
+    addPlayerReveals(revealCount);
     setPowerUpUsed("reveal");
     setPowerUpMode(null);
     setSelectedTileId(null);
     setHintCells([]);
+  }
+
+  function addPlayerReveals(count: number) {
+    if (count <= 0) return;
+    const next = playerRevealsRef.current + count;
+    playerRevealsRef.current = next;
+    setPlayerReveals(next);
   }
 
   function showHint() {
@@ -741,13 +766,14 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
       showHiddenHints,
       powerUpUsed,
       overdrawActive,
+      playerReveals,
     };
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot));
     } catch {
       // ignore write errors
     }
-  }, [game, turn, isPlayerTurn, scorelessTurns, passStreak, matchStats, moveHistory, swapsUsed, showHiddenHints, powerUpUsed, overdrawActive]);
+  }, [game, turn, isPlayerTurn, scorelessTurns, passStreak, matchStats, moveHistory, swapsUsed, showHiddenHints, powerUpUsed, overdrawActive, playerReveals]);
 
   useEffect(() => {
     matchStatsRef.current = matchStats;
@@ -760,6 +786,10 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   useEffect(() => {
     passStreakRef.current = passStreak;
   }, [passStreak]);
+
+  useEffect(() => {
+    playerRevealsRef.current = playerReveals;
+  }, [playerReveals]);
 
   useEffect(() => {
     gameOverRef.current = gameOver;
@@ -950,11 +980,29 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     const finalWinner = winner ?? computeWinner(nextGame.scores);
     if (finalWinner === "You") playWinSound();
     if (finalWinner === "AI") playLoseSound();
+
+    const xpGained = computeXpGain({
+      win: finalWinner === "You",
+      wordsPlayed: stats.playerWords,
+      tilesPlaced: stats.playerTiles,
+      modifiersRevealed: playerRevealsRef.current,
+    });
+    const progression = loadProgression();
+    const totalBefore = progression.totalXP;
+    const levelBefore = computeLevelProgress(totalBefore).level;
+    const totalXP = totalBefore + xpGained;
+    saveProgression({ ...progression, totalXP });
+    const levelAfter = computeLevelProgress(totalXP).level;
+
     setGameOver({
       winner: finalWinner,
       reason,
       scores: { ...nextGame.scores },
       stats,
+      xpGained,
+      levelBefore,
+      levelAfter,
+      totalXP,
     });
     setPlayModal(null);
     setBlankPicker(null);
@@ -1563,7 +1611,8 @@ function openSubmitModal() {
         tiles: move.placements.length,
       });
       recordMove("AI", validation.words, points);
-      const { nextBoard } = applyRevealThisTurn(sim);
+      const { nextBoard, revealedNow } = applyRevealThisTurn(sim);
+    addPlayerReveals(revealedNow.length);
       const refill = refillRack(sim.aiRack, sim.bag);
 
       const nextGame = {
@@ -1644,7 +1693,8 @@ function openSubmitModal() {
       tiles: current.placedThisTurn.length,
     });
     recordMove("You", words, points);
-    const { nextBoard } = applyRevealThisTurn(current);
+    const { nextBoard, revealedNow } = applyRevealThisTurn(current);
+    addPlayerReveals(revealedNow.length);
     const rackAfterPenalty = applyOverdrawPenalty(current.rack);
     const refill = refillRack(rackAfterPenalty, current.bag, current.difficulty);
     const lastPlayedIds = collectWordTileIds(words);
@@ -1714,6 +1764,8 @@ function openSubmitModal() {
     setPowerUpMode(null);
     setPowerUpUsed(null);
     setOverdrawActive(false);
+    setPlayerReveals(0);
+    playerRevealsRef.current = 0;
     setHintCells([]);
     dismissTurnScore();
     setMoveHistory([]);
@@ -2150,6 +2202,15 @@ function openSubmitModal() {
             <div className="gameOverScoreLine">
               <span>You {gameOver.scores.player}</span>
               <span>AI {gameOver.scores.ai}</span>
+            </div>
+            <div className="gameOverXp">
+              <div className="xpGain">+{gameOver.xpGained} XP</div>
+              <div className={"xpLevel" + (gameOver.levelAfter > gameOver.levelBefore ? " levelUp" : "")}>
+                {gameOver.levelAfter > gameOver.levelBefore
+                  ? `Level Up! ${gameOver.levelBefore} -> ${gameOver.levelAfter}`
+                  : `Level ${gameOver.levelAfter}`}
+              </div>
+              <div className="xpTotal">Total XP: {gameOver.totalXP}</div>
             </div>
             <div className="gameOverGrid">
               <div className="gameOverBlock">

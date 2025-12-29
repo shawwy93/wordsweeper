@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
 import type { Difficulty } from "../game/types";
+import { computeLevelProgress } from "../progression/leveling";
+import { loadProgression } from "../progression/storage";
 import buttonAudioSrc from "../assets/audio/buttonAudio.mp3";
 import playAudioSrc from "../assets/audio/playAudio.mp3";
 
@@ -15,6 +17,8 @@ export default function MenuScreen(props: {
   hasSavedGame: boolean;
 }) {
   const [showDifficulty, setShowDifficulty] = useState(false);
+  const progression = loadProgression();
+  const levelInfo = computeLevelProgress(progression.totalXP);
   const audioRef = useRef<{
     play: HTMLAudioElement;
     button: HTMLAudioElement;
@@ -88,6 +92,15 @@ export default function MenuScreen(props: {
       <div className="menuLayout">
         <div className="menuHeaderSpacer" aria-hidden="true" />
         <div className="menuStack">
+          <div className="menuLevel">
+            <div className="menuLevelRow">
+              <span>Level {levelInfo.level}</span>
+              <span>{levelInfo.progress}/{levelInfo.target} XP</span>
+            </div>
+            <div className="menuLevelBar">
+              <div className="menuLevelFill" style={{ width: `${Math.round(levelInfo.percent * 100)}%` }} />
+            </div>
+          </div>
           <button className="menuAction primary" type="button" onClick={handlePlayClick}>
             Play
           </button>

@@ -108,6 +108,35 @@ body.gameBackground {
   gap: clamp(1px, 2.8vh, 15px);
   padding: 0 clamp(12px, 6vw, 90px) clamp(-100px, 4vh, 100px);
 }
+.menuLevel {
+  width: min(364px, 62vw);
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(8, 20, 32, 0.55);
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+  color: var(--text);
+}
+.menuLevelRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 800;
+}
+.menuLevelBar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.15);
+  overflow: hidden;
+}
+.menuLevelFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(255, 227, 150, 0.95), rgba(255, 176, 90, 0.95));
+  box-shadow: 0 0 12px rgba(255, 210, 120, 0.5);
+}
 
 .menuAction {
   width: min(364px, 58vw);
@@ -1294,6 +1323,43 @@ body.gameBackground {
   border-radius: 12px;
   background: rgba(8, 18, 28, 0.55);
   border: 1px solid rgba(255,255,255,0.16);
+}
+.gameOverXp {
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(10, 24, 36, 0.5);
+  border: 1px solid rgba(255,255,255,0.14);
+}
+.xpGain {
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--accent2);
+}
+.xpLevel {
+  font-weight: 800;
+  color: var(--text);
+}
+.xpLevel.levelUp {
+  color: #ffe6a6;
+  text-shadow: 0 0 12px rgba(255, 218, 140, 0.55);
+  animation: levelPulse 1.2s ease-in-out infinite;
+}
+.xpTotal {
+  font-size: 12px;
+  color: var(--muted);
+}
+@keyframes levelPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 .gameOverGrid {
   display: grid;
