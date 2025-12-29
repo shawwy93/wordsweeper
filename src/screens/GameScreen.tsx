@@ -17,7 +17,6 @@ import buttonAudioSrc from "../assets/audio/buttonAudio.mp3";
 import loseAudioSrc from "../assets/audio/loseAudio.mp3";
 import winAudioSrc from "../assets/audio/winAudio.mp3";
 
-const TOTAL_TILES = createTileBag().length;
 const AI_DELAY_MS = 650;
 const TOUCH_DRAG_THRESHOLD = 6;
 const MAX_SWAPS = 3;
@@ -533,10 +532,12 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     [game.placedThisTurn]
   );
 
+  const totalTiles = useMemo(() => createTileBag(game.difficulty).length, [game.difficulty]);
+
   const selectedTile = selectedTileId ? game.tilesById[selectedTileId] : null;
   const tilesPlaced = useMemo(
-    () => Math.max(TOTAL_TILES - (game.bag.length + game.rack.length + game.aiRack.length), 0),
-    [game.bag.length, game.rack.length, game.aiRack.length]
+    () => Math.max(totalTiles - (game.bag.length + game.rack.length + game.aiRack.length), 0),
+    [totalTiles, game.bag.length, game.rack.length, game.aiRack.length]
   );
   const dragTile = touchDrag ? game.tilesById[touchDrag.tileId] : null;
 
@@ -653,6 +654,11 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     pendingTouchRef.current = null;
     if (finalWinner === "You") recordGameResult("win");
     if (finalWinner === "AI") recordGameResult("loss");
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch {
+      // ignore storage errors
+    }
     aiQueuedRef.current = false;
     setAiBusy(false);
     setIsPlayerTurn(true);

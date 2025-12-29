@@ -24,6 +24,7 @@ export default function App() {
   });
   const [settingsReturn, setSettingsReturn] = useState<Screen>("menu");
   const [resumeGame, setResumeGame] = useState(initialResume);
+  const [hasSavedGame, setHasSavedGame] = useState(() => Boolean(localStorage.getItem("hh_saved_game")));
   const [difficulty, setDifficulty] = useState<Difficulty>(() => {
     const raw = localStorage.getItem("hh_difficulty");
     if (raw === "easy" || raw === "normal" || raw === "hard") return raw;
@@ -116,12 +117,24 @@ export default function App() {
   }
 
   function startNewGame() {
+    try {
+      localStorage.removeItem("hh_saved_game");
+    } catch {
+      // ignore storage errors
+    }
+    setHasSavedGame(false);
     setResumeGame(false);
+    setScreen("game");
+  }
+
+  function resumeSavedGame() {
+    setResumeGame(true);
     setScreen("game");
   }
 
   function exitToMenu() {
     setResumeGame(false);
+    setHasSavedGame(Boolean(localStorage.getItem("hh_saved_game")));
     setScreen("menu");
   }
 
@@ -153,10 +166,14 @@ export default function App() {
       {screen === "menu" && (
         <MenuScreen
           onPlay={startNewGame}
+          onResume={resumeSavedGame}
           onHow={() => setScreen("how")}
           onSettings={() => openSettings("menu")}
           onStats={() => setScreen("stats")}
+          difficulty={settings.difficulty}
+          setDifficulty={settings.setDifficulty}
           audio={settings.audio}
+          hasSavedGame={hasSavedGame}
         />
       )}
 

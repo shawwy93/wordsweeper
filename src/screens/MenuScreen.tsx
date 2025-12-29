@@ -5,12 +5,14 @@ import playAudioSrc from "../assets/audio/playAudio.mp3";
 
 export default function MenuScreen(props: {
   onPlay: () => void;
+  onResume: () => void;
   onHow: () => void;
   onSettings: () => void;
   onStats: () => void;
   difficulty: Difficulty;
   setDifficulty: (d: Difficulty) => void;
   audio: { ui: boolean; game: boolean };
+  hasSavedGame: boolean;
 }) {
   const [showDifficulty, setShowDifficulty] = useState(false);
   const audioRef = useRef<{
@@ -54,6 +56,11 @@ export default function MenuScreen(props: {
     setShowDifficulty(true);
   }
 
+  function handleResume() {
+    playButtonSound();
+    props.onResume();
+  }
+
   function handlePick(d: Difficulty) {
     playButtonSound();
     props.setDifficulty(d);
@@ -84,6 +91,11 @@ export default function MenuScreen(props: {
           <button className="menuAction primary" type="button" onClick={handlePlayClick}>
             Play
           </button>
+          {props.hasSavedGame && (
+            <button className="menuAction" type="button" onClick={handleResume}>
+              Resume
+            </button>
+          )}
           <div className="menuSecondary">
             <button className="menuSecondaryAction" type="button" onClick={handleStats}>
               Stats
@@ -92,6 +104,9 @@ export default function MenuScreen(props: {
               Settings
             </button>
           </div>
+          <a className="menuPrivacy" href="/privacy.html">
+            Privacy
+          </a>
         </div>
       </div>
 

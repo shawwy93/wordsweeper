@@ -62,6 +62,11 @@ export default function SettingsScreen(props: {
               <span className="small">{Math.round(props.music.volume * 100)}%</span>
             </div>
           </div>
+
+          <div style={{ height: 12 }} />
+          <a className="settingsLink" href="/privacy.html">
+            Privacy
+          </a>
         </div>
       </div>
     </div>

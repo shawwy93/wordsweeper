@@ -157,6 +157,16 @@ body.gameBackground {
   box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 14px rgba(8, 18, 26, 0.3);
 }
 
+.menuPrivacy {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.menuPrivacy:hover {
+  color: var(--text);
+}
+
 .difficultyOverlay {
   position: fixed;
   inset: 0;
@@ -1278,6 +1288,15 @@ body.gameBackground {
 }
 .settingsRules li {
   margin-bottom: 4px;
+}
+
+.settingsLink {
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.settingsLink:hover {
+  color: var(--text);
 }
 
 .musicRow {

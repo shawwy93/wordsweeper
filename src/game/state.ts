@@ -52,7 +52,7 @@ export function createNewGame(difficulty: Difficulty): GameState {
   const baseBoard = createEmptyBoard();
   const board = generateModifiers(baseBoard);
 
-  const bag = shuffle(createTileBag());
+  const bag = shuffle(createTileBag(difficulty));
   const playerDraw = draw(bag, RACK_SIZE);
   const balancedPlayer = rebalanceRack(playerDraw.take, playerDraw.rest);
   const aiDraw = draw(balancedPlayer.bag, RACK_SIZE);
