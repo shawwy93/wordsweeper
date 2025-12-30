@@ -1,4 +1,4 @@
-type Unlocks = {
+﻿type Unlocks = {
   themes: string[];
   skins: string[];
   badges: string[];
@@ -15,10 +15,16 @@ export type ProgressionSaveV2 = {
   unlocks: Unlocks;
 };
 
+type ProgressionSaveRaw = Record<string, unknown> & {
+  version?: number;
+  totalXP?: number;
+  unlocks?: unknown;
+};
+
 type ProgressionSave =
   | ProgressionSaveV1
   | ProgressionSaveV2
-  | (Record<string, unknown> & { version?: number; totalXP?: number; unlocks?: unknown });
+  | (Record<string, unknown> & { version: number; totalXP: number });
 
 const STORAGE_KEY = "hh_progression";
 const EMPTY_UNLOCKS: Unlocks = { themes: [], skins: [], badges: [] };
@@ -39,7 +45,7 @@ function normalizeUnlocks(value: unknown): Unlocks {
   };
 }
 
-function migrateProgression(raw: ProgressionSave): ProgressionSave {
+function migrateProgression(raw: ProgressionSaveRaw): ProgressionSave {
   const version = Number((raw as { version?: number }).version);
   const safeVersion = Number.isFinite(version) && version > 0 ? version : 1;
   const totalXP = coerceTotalXP((raw as { totalXP?: number }).totalXP);
@@ -62,7 +68,7 @@ export function loadProgression(): ProgressionSaveV1 | ProgressionSaveV2 | (Reco
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { version: 1, totalXP: 0 };
-    const parsed = JSON.parse(raw) as ProgressionSave;
+    const parsed = JSON.parse(raw) as ProgressionSaveRaw;
     if (!parsed || typeof parsed !== "object") return { version: 1, totalXP: 0 };
     return migrateProgression(parsed);
   } catch {
