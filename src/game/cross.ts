@@ -3,9 +3,17 @@ import { BOARD_SIZE, LETTER_VALUES } from "./constants";
 import { BoardCell, Tile } from "./types";
 
 const CROSS_POOL_SIZE = 100;
-const CROSS_WORD_COUNT = 10;
+const CROSS_WORD_COUNT = 8;
 const MIN_LEN = 3;
 const MAX_LEN = 7;
+
+const LENGTH_WEIGHTS: Record<number, number> = {
+  3: 0.9,
+  4: 1.6,
+  5: 1.1,
+  6: 0.6,
+  7: 0.25,
+};
 
 function shuffle<T>(arr: T[]) {
   const copy = [...arr];
@@ -16,6 +24,10 @@ function shuffle<T>(arr: T[]) {
   return copy;
 }
 
+function weightForLength(length: number) {
+  return LENGTH_WEIGHTS[length] ?? 1;
+}
+
 const RAW_POOL = Array.from(DICTIONARY).filter(
   (word) => word.length >= MIN_LEN && word.length <= MAX_LEN && /^[A-Z]+$/.test(word)
 );
@@ -24,6 +36,35 @@ function buildCrossBag() {
   const pool = shuffle([...RAW_POOL]);
   if (pool.length <= CROSS_POOL_SIZE) return pool;
   return pool.slice(0, CROSS_POOL_SIZE);
+}
+
+function pickWeightedWord(poolByLength: Map<number, string[]>) {
+  const lengths = Array.from(poolByLength.entries())
+    .filter(([, words]) => words.length > 0)
+    .map(([length]) => length);
+  if (lengths.length === 0) return null;
+
+  const weights = lengths.map((length) => weightForLength(length));
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  let roll = Math.random() * total;
+  let chosenLength = lengths[lengths.length - 1];
+  for (let i = 0; i < lengths.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) {
+      chosenLength = lengths[i];
+      break;
+    }
+  }
+
+  const list = poolByLength.get(chosenLength);
+  if (!list || list.length === 0) return null;
+  const idx = Math.floor(Math.random() * list.length);
+  const word = list[idx];
+  list.splice(idx, 1);
+  if (list.length === 0) {
+    poolByLength.delete(chosenLength);
+  }
+  return word;
 }
 
 function canPlaceWord(
@@ -83,12 +124,21 @@ function placeWord(
 
 export function seedCrossWords(board: BoardCell[][], tilesById: Record<string, Tile>) {
   const pool = shuffle(buildCrossBag());
+  const poolByLength = new Map<number, string[]>();
+  for (const word of pool) {
+    const list = poolByLength.get(word.length) ?? [];
+    list.push(word);
+    poolByLength.set(word.length, list);
+  }
+
   const placed: string[] = [];
   let nextId = 0;
+  let remaining = pool.length;
 
-  for (const word of pool) {
-    if (placed.length >= CROSS_WORD_COUNT) break;
-    if (word.length > BOARD_SIZE) continue;
+  while (placed.length < CROSS_WORD_COUNT && remaining > 0) {
+    const word = pickWeightedWord(poolByLength);
+    if (!word) break;
+    remaining -= 1;
 
     let placedWord = false;
     for (let attempt = 0; attempt < 120; attempt++) {
