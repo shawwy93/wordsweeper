@@ -2,13 +2,14 @@
 import MenuScreen from "./screens/MenuScreen";
 import CrossMenuScreen from "./screens/CrossMenuScreen";
 import GameScreen from "./screens/GameScreen";
+import WordleScreen from "./screens/WordleScreen";
 import HowToPlayScreen from "./screens/HowToPlayScreen";
 import SettingsScreen from "./screens/SettingsScreen";
 import StatsScreen from "./screens/StatsScreen";
 import { Difficulty } from "./game/types";
 import backgroundAudioSrc from "./assets/audio/backgroundAudio.mp3";
 
-type Screen = "menu" | "crossMenu" | "game" | "cross" | "how" | "settings" | "stats";
+type Screen = "menu" | "crossMenu" | "game" | "cross" | "wordle" | "how" | "settings" | "stats";
 type StatsMode = "standard" | "cross";
 type AudioSettings = { ui: boolean; game: boolean };
 type MusicSettings = { muted: boolean; volume: number };
@@ -240,6 +241,7 @@ export default function App() {
         <MenuScreen
           onPlay={startNewGame}
           onCross={() => setScreen("crossMenu")}
+          onWordle={() => setScreen("wordle")}
           onResume={resumeSavedGame}
           onHow={() => setScreen("how")}
           onSettings={() => openSettings("menu")}
@@ -287,6 +289,10 @@ export default function App() {
         />
       )}
 
+      {screen === "wordle" && (
+        <WordleScreen onExit={() => setScreen("menu")} />
+      )}
+
       {screen === "how" && (
         <HowToPlayScreen
           onBack={() => {
@@ -312,3 +318,8 @@ export default function App() {
     </div>
   );
 }
+
+
+
+
+

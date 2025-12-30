@@ -1,4 +1,4 @@
-﻿import { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { Difficulty } from "../game/types";
 import { computeLevelProgress } from "../progression/leveling";
 import { loadProgression } from "../progression/storage";
@@ -8,6 +8,7 @@ import playAudioSrc from "../assets/audio/playAudio.mp3";
 export default function MenuScreen(props: {
   onPlay: () => void;
   onCross: () => void;
+  onWordle: () => void;
   onResume: () => void;
   onHow: () => void;
   onSettings: () => void;
@@ -93,6 +94,10 @@ export default function MenuScreen(props: {
     props.onSettings();
   }
 
+  function handleWordle() {
+    playButtonSound();
+    props.onWordle();
+  }
   function handleCross() {
     playButtonSound();
     let nextDifficulty: Difficulty = props.difficulty;
@@ -127,6 +132,9 @@ export default function MenuScreen(props: {
           </button>
           <button className="menuAction" type="button" onClick={handleCross}>
             Cross Sweeper
+          </button>
+          <button className="menuAction" type="button" onClick={handleWordle}>
+            Word Sweeple
           </button>
           {props.hasSavedGame && (
             <button className="menuAction" type="button" onClick={handleResume}>
@@ -187,4 +195,9 @@ export default function MenuScreen(props: {
     </div>
   );
 }
+
+
+
+
+
 
