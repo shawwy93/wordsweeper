@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --bg: #070c16;
   --panel: rgba(22, 64, 88, 0.32);
   --panel2: rgba(18, 52, 74, 0.45);
@@ -30,8 +30,7 @@ html, body { height: 100%; }
 body {
   margin: 0;
   font-family: var(--font-display);
-  background: #070c16 url("./assets/WordSweeperMobile.png") center / contain no-repeat;
-  background-size:40%;
+  background: #070c16 url("./assets/WordSweeperDesktop.png") center / cover no-repeat;
   color: var(--text);
   overflow: hidden;
 }
@@ -122,7 +121,13 @@ body.gameBackground {
   flex-direction: column;
   align-items: center;
   gap: clamp(1px, 2.8vh, 15px);
-  padding: 0 clamp(12px, 6vw, 90px) clamp(-100px, 4vh, 100px);
+  padding: 0 clamp(12px, 6vw, 90px) clamp(-100px, 4vh, 190px);
+}
+.menuLogo {
+  width: min(380px, 70vw);
+  margin: 0 auto 10px;
+  display: block;
+  filter: drop-shadow(0 12px 22px rgba(8, 18, 26, 0.45));
 }
 .menuLevel {
   width: min(364px, 62vw);
@@ -2189,10 +2194,10 @@ body.gameBackground {
     display: inline-flex;
   }
 }
-
-  
-
 @media (max-width: 900px) {
+  .menuLogo {
+    display: none;
+  }
   body {
     background: #070c16 url("./assets/WordSweeperMobile.png") center 12% / cover no-repeat;
   }
@@ -2206,18 +2211,27 @@ body.gameBackground {
   .screen {
     width: 100%;
     height: 100vh;
+    height: 100svh;
     padding:0;
+  }
+  .menuLayout {
+    padding: 12px clamp(12px, 6vw, 90px) calc(env(safe-area-inset-bottom) + 12px);
+    justify-content: flex-end;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
+  }
+  .menuHeaderSpacer {
+    display: none;
+  }
+  .menuStack {
+    margin-bottom: calc(env(safe-area-inset-bottom) + 8px);
+    margin-top: auto;
   }
   .desktopShell {
     display: none;
-    
   }
   .mobileShell {
     display: grid;
     padding-top:70px;
-  }
-  .menuHeaderSpacer {
-    flex: 0.8;
   }
   .menuAction {
     font-size: clamp(18px, 5.5vw, 30px);
@@ -2232,7 +2246,6 @@ body.gameBackground {
     left:45%;
     font-size: 7px;
     padding: 1px 1px;
-  
   }
   .boardTileValue {
     font-size: 8px;
@@ -2241,8 +2254,7 @@ body.gameBackground {
   .tileLetter {
     font-size: 16px;
   }
-  
-.tileValue {
+  .tileValue {
     font-size: 9px;
   }
   .dictOverlay {
@@ -2255,7 +2267,49 @@ body.gameBackground {
     height: 100%;
     border-radius: 16px 0 0 16px;
   }
+  .wordleCard {
+    padding: 8px;
+    gap: 8px;
+  }
+  .wordleStatus {
+    font-size: 11px;
+  }
+  .wordleGrid {
+    gap: 6px;
+    --wordle-tile: clamp(24px, 6.6vw, 38px);
+  }
+  .wordleRow {
+    gap: 6px;
+  }
+  .wordleKeyboard {
+    gap: 6px;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 18px);
+  }
+  .wordleKey {
+    height: 30px;
+    font-size: 10px;
+    padding: 0 6px;
+  }
+  .wordleCard .btn {
+    padding: 8px 10px;
+    font-size: 12px;
+    border-radius: 12px;
+  }
+  .wordleScreen {
+    padding-top: env(safe-area-inset-top);
+  }
+  .wordleScreen .topbar {
+    margin-top: 8px;
+  }
+  .wordleGrid {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
 }
+
+  
+
+  
 
 
 
@@ -2265,6 +2319,9 @@ body.gameBackground {
 
 .wordleScreen {
   width: 100%;
+}
+.wordleScreen .topbar {
+  margin-top: 6px;
 }
 .wordleCard {
   flex: 1;
@@ -2296,6 +2353,8 @@ body.gameBackground {
 }
 .wordleGrid {
   display: grid;
+  margin: 0 auto;
+  align-self: center;
   gap: 8px;
   justify-content: center;
   padding-top: 6px;
@@ -2373,6 +2432,14 @@ body.gameBackground {
   gap: 6px;
   flex-wrap: nowrap;
 }
+.wordleActionRow {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+.wordleActionRow .wordleKey.wide {
+  width: min(160px, 42vw);
+}
 .wordleKey {
   min-width: 32px;
   padding: 10px 8px;
@@ -2434,3 +2501,11 @@ body.gameBackground {
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
 }
+
+
+
+
+
+
+
+

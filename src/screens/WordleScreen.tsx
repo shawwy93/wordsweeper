@@ -234,13 +234,16 @@ export default function WordleScreen(props: Props) {
           ))}
         </div>
         <div className="wordleKeyboard">
+          <div className="wordleActionRow">
+            <button className="wordleKey wide" type="button" onClick={submitGuess}>
+              Enter
+            </button>
+            <button className="wordleKey wide" type="button" onClick={handleBackspace}>
+              Del
+            </button>
+          </div>
           {KEYBOARD_ROWS.map((row, idx) => (
             <div key={`kb-${idx}`} className="wordleKeyboardRow">
-              {idx === 2 && (
-                <button className="wordleKey wide" type="button" onClick={submitGuess}>
-                  Enter
-                </button>
-              )}
               {row.split("").map((letter) => (
                 <button
                   key={letter}
@@ -251,11 +254,6 @@ export default function WordleScreen(props: Props) {
                   {letter}
                 </button>
               ))}
-              {idx === 2 && (
-                <button className="wordleKey wide" type="button" onClick={handleBackspace}>
-                  Del
-                </button>
-              )}
             </div>
           ))}
         </div>

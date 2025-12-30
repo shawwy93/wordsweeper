@@ -4,6 +4,7 @@ import { computeLevelProgress } from "../progression/leveling";
 import { loadProgression } from "../progression/storage";
 import buttonAudioSrc from "../assets/audio/buttonAudio.mp3";
 import playAudioSrc from "../assets/audio/playAudio.mp3";
+import logoSrc from "../assets/logo.png";
 
 export default function MenuScreen(props: {
   onPlay: () => void;
@@ -118,6 +119,7 @@ export default function MenuScreen(props: {
       <div className="menuLayout">
         <div className="menuHeaderSpacer" aria-hidden="true" />
         <div className="menuStack">
+          <img className="menuLogo" src={logoSrc} alt="Word Sweeper" />
           <div className="menuLevel">
             <div className="menuLevelRow">
               <span>Level {levelInfo.level}</span>
@@ -195,6 +197,8 @@ export default function MenuScreen(props: {
     </div>
   );
 }
+
+
 
 
 
