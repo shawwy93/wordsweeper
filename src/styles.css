@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #070c16;
   --panel: rgba(22, 64, 88, 0.32);
   --panel2: rgba(18, 52, 74, 0.45);
@@ -82,6 +82,22 @@ body.gameBackground {
 
 }
 
+.statsScreen {
+  height: calc(100vh - 24px);
+}
+.statsCard {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.statsContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
 .card {
   background: linear-gradient(145deg, rgba(255,255,255,0.22), rgba(18, 56, 78, 0.32) 45%, rgba(10, 32, 46, 0.55));
   border: 1px solid var(--glass-border);
@@ -1397,6 +1413,36 @@ body.gameBackground {
 .gameOverBest {
   font-weight: 800;
 }
+.crossScoreForm {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(8, 18, 28, 0.45);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.crossScoreLabel {
+  font-size: 12px;
+  font-weight: 700;
+}
+.crossScoreInputRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.crossScoreInput {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(5, 12, 20, 0.6);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.crossScoreName {
+  font-weight: 600;
+}
 .crossScoreboard {
   border-radius: 14px;
   padding: 10px 12px;
@@ -2210,6 +2256,9 @@ body.gameBackground {
     border-radius: 16px 0 0 16px;
   }
 }
+
+
+
 
 
 

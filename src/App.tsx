@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import MenuScreen from "./screens/MenuScreen";
+import CrossMenuScreen from "./screens/CrossMenuScreen";
 import GameScreen from "./screens/GameScreen";
 import HowToPlayScreen from "./screens/HowToPlayScreen";
 import SettingsScreen from "./screens/SettingsScreen";
@@ -7,7 +8,8 @@ import StatsScreen from "./screens/StatsScreen";
 import { Difficulty } from "./game/types";
 import backgroundAudioSrc from "./assets/audio/backgroundAudio.mp3";
 
-type Screen = "menu" | "game" | "cross" | "how" | "settings" | "stats";
+type Screen = "menu" | "crossMenu" | "game" | "cross" | "how" | "settings" | "stats";
+type StatsMode = "standard" | "cross";
 type AudioSettings = { ui: boolean; game: boolean };
 type MusicSettings = { muted: boolean; volume: number };
 
@@ -17,14 +19,24 @@ export default function App() {
     const last = localStorage.getItem("hh_active_screen");
     return Boolean(saved) && last === "game";
   })();
+  const initialCrossResume = (() => {
+    const saved = localStorage.getItem("hh_saved_cross_game");
+    const last = localStorage.getItem("hh_active_screen");
+    return Boolean(saved) && last === "cross";
+  })();
   const [screen, setScreen] = useState<Screen>(() => {
     const seenHow = localStorage.getItem("hh_seenHow") === "1";
     if (initialResume) return "game";
+    if (initialCrossResume) return "cross";
     return seenHow ? "menu" : "how";
   });
   const [settingsReturn, setSettingsReturn] = useState<Screen>("menu");
+  const [statsReturn, setStatsReturn] = useState<Screen>("menu");
+  const [statsMode, setStatsMode] = useState<StatsMode>("standard");
   const [resumeGame, setResumeGame] = useState(initialResume);
+  const [resumeCrossGame, setResumeCrossGame] = useState(initialCrossResume);
   const [hasSavedGame, setHasSavedGame] = useState(() => Boolean(localStorage.getItem("hh_saved_game")));
+  const [hasSavedCrossGame, setHasSavedCrossGame] = useState(() => Boolean(localStorage.getItem("hh_saved_cross_game")));
   const [difficulty, setDifficulty] = useState<Difficulty>(() => {
     const raw = localStorage.getItem("hh_difficulty");
     if (raw === "easy" || raw === "normal" || raw === "hard") return raw;
@@ -60,7 +72,6 @@ export default function App() {
     musicRef.current = audio;
   }
 
-
   useEffect(() => {
     const audio = musicRef.current;
     if (!audio) return;
@@ -71,6 +82,15 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("hh_active_screen", screen);
+  }, [screen]);
+
+  useEffect(() => {
+    if (screen === "menu") {
+      setHasSavedGame(Boolean(localStorage.getItem("hh_saved_game")));
+    }
+    if (screen === "crossMenu") {
+      setHasSavedCrossGame(Boolean(localStorage.getItem("hh_saved_cross_game")));
+    }
   }, [screen]);
 
   useEffect(() => {
@@ -104,6 +124,7 @@ export default function App() {
       window.removeEventListener("keydown", tryStart);
     };
   }, []);
+
   function openSettings(from: Screen) {
     setSettingsReturn(from);
     setScreen("settings");
@@ -113,6 +134,25 @@ export default function App() {
     setScreen(settingsReturn);
     if (settingsReturn === "game") {
       setResumeGame(true);
+    }
+    if (settingsReturn === "cross") {
+      setResumeCrossGame(true);
+    }
+  }
+
+  function openStats(mode: StatsMode, returnTo: Screen) {
+    setStatsMode(mode);
+    setStatsReturn(returnTo);
+    setScreen("stats");
+  }
+
+  function handleStatsBack() {
+    setScreen(statsReturn);
+    if (statsReturn === "game") {
+      setResumeGame(true);
+    }
+    if (statsReturn === "cross") {
+      setResumeCrossGame(true);
     }
   }
 
@@ -128,8 +168,24 @@ export default function App() {
   }
 
   function startCrossGame() {
-    setHasSavedGame(Boolean(localStorage.getItem("hh_saved_game")));
-    setResumeGame(false);
+    try {
+      localStorage.removeItem("hh_saved_cross_game");
+    } catch {
+      // ignore storage errors
+    }
+    setHasSavedCrossGame(false);
+    setResumeCrossGame(false);
+    setScreen("cross");
+  }
+
+  function startOverCrossGame() {
+    try {
+      localStorage.removeItem("hh_saved_cross_game");
+    } catch {
+      // ignore storage errors
+    }
+    setHasSavedCrossGame(false);
+    setResumeCrossGame(false);
     setScreen("cross");
   }
 
@@ -138,10 +194,21 @@ export default function App() {
     setScreen("game");
   }
 
+  function resumeCrossSavedGame() {
+    setResumeCrossGame(true);
+    setScreen("cross");
+  }
+
   function exitToMenu() {
     setResumeGame(false);
     setHasSavedGame(Boolean(localStorage.getItem("hh_saved_game")));
     setScreen("menu");
+  }
+
+  function exitCrossToMenu() {
+    setResumeCrossGame(false);
+    setHasSavedCrossGame(Boolean(localStorage.getItem("hh_saved_cross_game")));
+    setScreen("crossMenu");
   }
 
   const settings = useMemo(
@@ -172,15 +239,30 @@ export default function App() {
       {screen === "menu" && (
         <MenuScreen
           onPlay={startNewGame}
-          onCross={startCrossGame}
+          onCross={() => setScreen("crossMenu")}
           onResume={resumeSavedGame}
           onHow={() => setScreen("how")}
           onSettings={() => openSettings("menu")}
-          onStats={() => setScreen("stats")}
+          onStats={() => openStats("standard", "menu")}
           difficulty={settings.difficulty}
           setDifficulty={settings.setDifficulty}
           audio={settings.audio}
           hasSavedGame={hasSavedGame}
+        />
+      )}
+
+      {screen === "crossMenu" && (
+        <CrossMenuScreen
+          onPlay={startCrossGame}
+          onResume={resumeCrossSavedGame}
+          onStartOver={startOverCrossGame}
+          onStats={() => openStats("cross", "crossMenu")}
+          onSettings={() => openSettings("crossMenu")}
+          onBack={() => setScreen("menu")}
+          difficulty={settings.difficulty}
+          setDifficulty={settings.setDifficulty}
+          audio={settings.audio}
+          hasSavedGame={hasSavedCrossGame}
         />
       )}
 
@@ -198,9 +280,9 @@ export default function App() {
         <GameScreen
           difficulty={settings.difficulty}
           audio={settings.audio}
-          onExit={exitToMenu}
+          onExit={exitCrossToMenu}
           onSettings={() => openSettings("cross")}
-          resume={false}
+          resume={resumeCrossGame}
           mode="cross"
         />
       )}
@@ -224,7 +306,7 @@ export default function App() {
         />
       )}
 
-      {screen === "stats" && <StatsScreen onBack={() => setScreen("menu")} />}
+      {screen === "stats" && <StatsScreen onBack={handleStatsBack} mode={statsMode} />}
 
       <footer className="appFooter">(c) 2026 Word Sweeper</footer>
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import Board from "../components/Board";
 import Rack from "../components/Rack";
 import ScorePanel from "../components/ScorePanel";
@@ -9,7 +9,8 @@ import { createTileBag, RACK_SIZE } from "../game/constants";
 import { chooseAiMove, findBestMoveForRack, findHintMove } from "../game/ai";
 import { validateMove, type WordPlay } from "../game/validation";
 import { recordGameResult, recordGameStart, recordMoveStats } from "../game/stats";
-import { recordCrossScore, type CrossScoreEntry } from "../game/crossScore";
+import { recordCrossGameStart, recordCrossMoveStats } from "../game/crossStats";
+import { loadCrossScores, recordCrossScore, type CrossScoreEntry } from "../game/crossScore";
 import { computeLevelProgress, computeXpGain } from "../progression/leveling";
 import { loadProgression, saveProgression } from "../progression/storage";
 import tileBase from "../assets/tile-base.png";
@@ -98,11 +99,12 @@ type SavedGameState = {
 };
 
 const SAVE_KEY = "hh_saved_game";
+const CROSS_SAVE_KEY = "hh_saved_cross_game";
 
-function loadSavedGame(): SavedGameState | null {
+function loadSavedGame(key: string): SavedGameState | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as SavedGameState;
     if (!parsed || !parsed.game || !parsed.game.board) return null;
@@ -426,7 +428,8 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   const mode = props.mode ?? "standard";
   const isCross = mode === "cross";
   const aiEnabled = !isCross;
-  const savedState = !isCross && props.resume ? loadSavedGame() : null;
+  const saveKey = isCross ? CROSS_SAVE_KEY : SAVE_KEY;
+  const savedState = props.resume ? loadSavedGame(saveKey) : null;
   const [game, setGame] = useState(() => savedState?.game ?? (isCross ? createCrossGame(props.difficulty) : createNewGame(props.difficulty)));
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [showHiddenHints, setShowHiddenHints] = useState(() => savedState?.showHiddenHints ?? false);
@@ -446,6 +449,11 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   const [moveHistory, setMoveHistory] = useState<MoveEntry[]>(() => savedState?.moveHistory ?? []);
   const [blankPicker, setBlankPicker] = useState<BlankPick | null>(null);
   const [gameOver, setGameOver] = useState<GameOverState | null>(null);
+  const [crossName, setCrossName] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("hh_cross_name") ?? "";
+  });
+  const [crossSaved, setCrossSaved] = useState(false);
   const [scorelessTurns, setScorelessTurns] = useState(() => savedState?.scorelessTurns ?? 0);
   const [matchStats, setMatchStats] = useState<MatchStats>(() => savedState?.matchStats ?? { ...EMPTY_MATCH_STATS });
   const [touchDrag, setTouchDrag] = useState<TouchDrag | null>(null);
@@ -743,7 +751,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
 
   useEffect(() => {
     if (!savedState) {
-      recordGameStart();
+      recordModeGameStart();
     }
   }, []);
 
@@ -759,7 +767,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   }, []);
 
   useEffect(() => {
-    if (isCross || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
     const snapshot: SavedGameState = {
       version: 1,
       game,
@@ -776,11 +784,11 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
       playerReveals,
     };
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot));
+      localStorage.setItem(saveKey, JSON.stringify(snapshot));
     } catch {
       // ignore write errors
     }
-  }, [game, turn, isPlayerTurn, scorelessTurns, passStreak, matchStats, moveHistory, swapsUsed, showHiddenHints, powerUpUsed, overdrawActive, playerReveals, isCross]);
+  }, [game, turn, isPlayerTurn, scorelessTurns, passStreak, matchStats, moveHistory, swapsUsed, showHiddenHints, powerUpUsed, overdrawActive, playerReveals, saveKey]);
 
   useEffect(() => {
     matchStatsRef.current = matchStats;
@@ -801,6 +809,13 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   useEffect(() => {
     gameOverRef.current = gameOver;
   }, [gameOver]);
+
+  useEffect(() => {
+    if (gameOver?.mode !== "cross") return;
+    const savedName = typeof window === "undefined" ? "" : (localStorage.getItem("hh_cross_name") ?? "");
+    setCrossName(savedName || "Player");
+    setCrossSaved(false);
+  }, [gameOver?.mode]);
 
   useEffect(() => {
     turnScoreRef.current = turnScoreToast;
@@ -1003,14 +1018,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     const totalXP = totalBefore + xpGained;
     saveProgression({ ...progression, totalXP });
     const levelAfter = computeLevelProgress(totalXP).level;
-
-    const crossScores = isCross
-      ? recordCrossScore({
-          score: nextGame.scores.player,
-          words: stats.playerWords,
-          tiles: stats.playerTiles,
-        })
-      : undefined;
+    const crossScores = isCross ? loadCrossScores() : undefined;
 
     setGameOver({
       winner: finalWinner,
@@ -1032,19 +1040,54 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     setPowerUpMode(null);
     setTouchDrag(null);
     dismissTurnScore();
-    pendingTouchRef.current = null;
-    if (!isCross) {
+    pendingTouchRef.current = null;    if (!isCross) {
       if (finalWinner === "You") recordGameResult("win");
       if (finalWinner === "AI") recordGameResult("loss");
-      try {
-        localStorage.removeItem(SAVE_KEY);
-      } catch {
-        // ignore storage errors
-      }
+    }
+    try {
+      localStorage.removeItem(saveKey);
+    } catch {
+      // ignore storage errors
     }
     aiQueuedRef.current = false;
     setAiBusy(false);
     setIsPlayerTurn(true);
+  }
+
+  function finalizeCrossScore() {
+    if (!isCross || !gameOver || crossSaved) return;
+    const name = crossName.trim() || "Player";
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("hh_cross_name", name);
+      } catch {
+        // ignore storage errors
+      }
+    }
+    const crossScores = recordCrossScore({
+      name,
+      score: gameOver.scores.player,
+      words: gameOver.stats.playerWords,
+      tiles: gameOver.stats.playerTiles,
+    });
+    setGameOver((prev) => (prev ? { ...prev, crossScores } : prev));
+    setCrossSaved(true);
+  }
+
+  function recordModeGameStart() {
+    if (isCross) {
+      recordCrossGameStart();
+    } else {
+      recordGameStart();
+    }
+  }
+
+  function recordModeMoveStats(params: { player: "You" | "AI"; words: number; points: number; tiles: number }) {
+    if (isCross) {
+      recordCrossMoveStats(params);
+    } else {
+      recordMoveStats(params);
+    }
   }
 
   function checkGameOver(
@@ -1502,7 +1545,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     setGame(nextGame);
     setSelectedTileId(null);
     setSwapsUsed((prev) => prev + 1);
-    recordMoveStats({ player: "You", words: 0, points: 0, tiles: 0 });
+    recordModeMoveStats({ player: "You", words: 0, points: 0, tiles: 0 });
     const nextStats = recordMatchMove({ player: "You", words: 0, points: 0, tiles: 0 });
     recordMove("You", [], 0, "swap");
     resetScoreless();
@@ -1580,7 +1623,7 @@ function openSubmitModal() {
       if (!move) {
         const nextGame = { ...current, placedThisTurn: [], lastPlayedIds: [] };
         setGame(nextGame);
-        recordMoveStats({ player: "AI", words: 0, points: 0, tiles: 0 });
+        recordModeMoveStats({ player: "AI", words: 0, points: 0, tiles: 0 });
         const nextStats = recordMatchMove({ player: "AI", words: 0, points: 0, tiles: 0 });
         recordMove("AI", [], 0, "pass");
         const nextScoreless = updateScoreless(0);
@@ -1598,7 +1641,7 @@ function openSubmitModal() {
       if (!sim) {
         const nextGame = { ...current, placedThisTurn: [], lastPlayedIds: [] };
         setGame(nextGame);
-        recordMoveStats({ player: "AI", words: 0, points: 0, tiles: 0 });
+        recordModeMoveStats({ player: "AI", words: 0, points: 0, tiles: 0 });
         const nextStats = recordMatchMove({ player: "AI", words: 0, points: 0, tiles: 0 });
         recordMove("AI", [], 0, "pass");
         const nextScoreless = updateScoreless(0);
@@ -1616,7 +1659,7 @@ function openSubmitModal() {
       if (!validation.ok) {
         const nextGame = { ...current, placedThisTurn: [], lastPlayedIds: [] };
         setGame(nextGame);
-        recordMoveStats({ player: "AI", words: 0, points: 0, tiles: 0 });
+        recordModeMoveStats({ player: "AI", words: 0, points: 0, tiles: 0 });
         const nextStats = recordMatchMove({ player: "AI", words: 0, points: 0, tiles: 0 });
         recordMove("AI", [], 0, "pass");
         const nextScoreless = updateScoreless(0);
@@ -1631,7 +1674,7 @@ function openSubmitModal() {
       }
 
       const points = scoreTurn(sim, validation.words);
-      recordMoveStats({
+      recordModeMoveStats({
         player: "AI",
         words: validation.words.length,
         points,
@@ -1671,7 +1714,7 @@ function openSubmitModal() {
   }
 
   function commitAutoPlay(sim: GameState, words: WordPlay[], points: number, estimate: number) {
-    recordMoveStats({
+    recordModeMoveStats({
       player: "You",
       words: words.length,
       points,
@@ -1717,7 +1760,7 @@ function openSubmitModal() {
     playButtonSound();
     const current = gameRef.current;
     if (!current) return;
-    recordMoveStats({
+    recordModeMoveStats({
       player: "You",
       words: words.length,
       points,
@@ -1771,7 +1814,7 @@ function openSubmitModal() {
     const penalizedGame = { ...nextGame, rack: rackAfterPenalty };
     setGame(penalizedGame);
     setSelectedTileId(null);
-    recordMoveStats({ player: "You", words: 0, points: 0, tiles: 0 });
+    recordModeMoveStats({ player: "You", words: 0, points: 0, tiles: 0 });
     const nextStats = recordMatchMove({ player: "You", words: 0, points: 0, tiles: 0 });
     recordMove("You", [], 0, "pass");
     const nextScoreless = updateScoreless(0);
@@ -1827,7 +1870,7 @@ function openSubmitModal() {
     setPassStreak({ ...EMPTY_PASS_STREAK });
     passStreakRef.current = { ...EMPTY_PASS_STREAK };
     setSwapsUsed(0);
-    recordGameStart();
+    recordModeGameStart();
     setGame(isCross ? createCrossGame(props.difficulty) : createNewGame(props.difficulty));
   }
 
@@ -1836,7 +1879,7 @@ function openSubmitModal() {
       <div className="gameShell desktopShell">
         <aside className="leftRail">
           <div className="leftNav">
-            <button className="navItem" type="button" onClick={handleExit} aria-label="Home">
+            <button className="navItem" type="button" onClick={() => { finalizeCrossScore(); handleExit(); }} aria-label="Home">
               <IconMenu />
               <span>Home</span>
             </button>
@@ -1861,7 +1904,7 @@ function openSubmitModal() {
           <div className="panelCard">
             <div className="panelTitle">Actions</div>
             <div className="actionList">
-              <IconButton label="New Match" onClick={newMatch}>
+              <IconButton label="New Match" onClick={() => { finalizeCrossScore(); newMatch(); }}>
                 <IconPlus />
               </IconButton>
               <IconButton label="Shuffle Rack" onClick={shuffleRack} disabled={!canInteract}>
@@ -1879,7 +1922,7 @@ function openSubmitModal() {
               <IconButton label="Resign" onClick={resignGame} className="iconDanger">
                 <IconPass />
               </IconButton>
-              <IconButton label="Exit to Home" onClick={handleExit} className="iconDanger">
+              <IconButton label="Exit to Home" onClick={() => { finalizeCrossScore(); handleExit(); }} className="iconDanger">
                 <IconMenu />
               </IconButton>
             </div>
@@ -1961,7 +2004,7 @@ function openSubmitModal() {
               <button
                 className="iconButton compact"
                 type="button"
-                onClick={handleExit}
+                onClick={() => { finalizeCrossScore(); handleExit(); }}
                 aria-label="Home"
               >
                 <span className="iconGlyph"><IconMenu /></span>
@@ -2061,7 +2104,7 @@ function openSubmitModal() {
       </div>
       <div className="mobileShell">
         <div className="mobileTopBar">
-          <button className="mobileIconButton" type="button" onClick={handleExit} aria-label="Home">
+          <button className="mobileIconButton" type="button" onClick={() => { finalizeCrossScore(); handleExit(); }} aria-label="Home">
             <span className="iconGlyph"><IconBack /></span>
           </button>
 
@@ -2284,13 +2327,39 @@ function openSubmitModal() {
               )}
             </div>
             <div className="gameOverBest">Best move: {gameOver.stats.bestMove}</div>
+            {isCross && (
+              <div className="crossScoreForm">
+                <div className="crossScoreLabel">Save your score</div>
+                <div className="crossScoreInputRow">
+                  <input
+                    type="text"
+                    className="crossScoreInput"
+                    value={crossName}
+                    onChange={(event) => setCrossName(event.target.value)}
+                    maxLength={18}
+                    placeholder="Player"
+                  />
+                  <button
+                    type="button"
+                    className="confirmBtn"
+                    onClick={() => {
+                      playButtonSound();
+                      finalizeCrossScore();
+                    }}
+                    disabled={crossSaved}
+                  >
+                    {crossSaved ? "Saved" : "Save"}
+                  </button>
+                </div>
+              </div>
+            )}
             {isCross && gameOver.crossScores && gameOver.crossScores.length > 0 && (
               <div className="crossScoreboard">
                 <div className="crossScoreTitle">Cross Sweeper Scores</div>
                 <div className="crossScoreList">
                   {gameOver.crossScores.slice(0, 5).map((entry, idx) => (
                     <div key={entry.id} className="crossScoreRow">
-                      <span>#{idx + 1}</span>
+                      <span className="crossScoreName">#{idx + 1} {entry.name}</span>
                       <span>{entry.score} pts</span>
                     </div>
                   ))}
@@ -2298,10 +2367,10 @@ function openSubmitModal() {
               </div>
             )}
             <div className="gameOverButtons">
-              <button type="button" className="confirmBtn primary" onClick={newMatch}>
+              <button type="button" className="confirmBtn primary" onClick={() => { finalizeCrossScore(); newMatch(); }}>
                 Play Again
               </button>
-              <button type="button" className="confirmBtn" onClick={handleExit}>
+              <button type="button" className="confirmBtn" onClick={() => { finalizeCrossScore(); handleExit(); }}>
                 Home
               </button>
             </div>
@@ -2374,7 +2443,7 @@ function openSubmitModal() {
               </button>
             </div>
             <div className="moreSection">
-              <button className="moreActionButton" type="button" onClick={handleExit}>
+              <button className="moreActionButton" type="button" onClick={() => { finalizeCrossScore(); handleExit(); }}>
                 Home
               </button>
               <button className="moreActionButton" type="button" onClick={handleSettings}>
@@ -2503,3 +2572,27 @@ function openSubmitModal() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
