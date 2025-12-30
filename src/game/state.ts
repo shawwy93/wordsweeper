@@ -3,6 +3,7 @@ import { generateModifiers, createEmptyBoard } from "./generator";
 import { createTileBag } from "./constants";
 import { Difficulty, GameState, Tile } from "./types";
 import { RACK_HELP_WORDS } from "./dictionary";
+import { seedCrossWords } from "./cross";
 
 const VOWELS = new Set(["A", "E", "I", "O", "U"]);
 
@@ -258,6 +259,49 @@ export function createNewGame(difficulty: Difficulty): GameState {
     rack: playerRack,
     aiRack: balancedAi.rack,
     tilesById,
+    placedThisTurn: [],
+    lastRevealAnim: 0,
+    lastPlayedIds: [],
+    scores: { player: 0, ai: 0 },
+  };
+}
+
+export function createCrossGame(difficulty: Difficulty): GameState {
+  const baseBoard = createEmptyBoard();
+  const board = generateModifiers(baseBoard);
+
+  const bag = shuffle(createTileBag(difficulty));
+  let playerRack: Tile[] | null = null;
+  let bagAfterPlayer = bag;
+
+  if (Math.random() < 0.02) {
+    const batman = buildBatmanRack(bag);
+    if (batman) {
+      playerRack = batman.rack;
+      bagAfterPlayer = batman.bag;
+    }
+  }
+
+  if (!playerRack) {
+    const playerDraw = draw(bag, RACK_SIZE);
+    const balancedPlayer = rebalanceRack(playerDraw.take, playerDraw.rest);
+    const assistedPlayer = assistPlayerRack(balancedPlayer.rack, balancedPlayer.bag, difficulty);
+    playerRack = assistedPlayer.rack;
+    bagAfterPlayer = assistedPlayer.bag;
+  }
+
+  const tilesById: Record<string, Tile> = {};
+  for (const t of bag) tilesById[t.id] = t;
+
+  const seeded = seedCrossWords(board, tilesById);
+
+  return {
+    difficulty,
+    board: seeded.board,
+    bag: bagAfterPlayer,
+    rack: playerRack,
+    aiRack: [],
+    tilesById: seeded.tilesById,
     placedThisTurn: [],
     lastRevealAnim: 0,
     lastPlayedIds: [],

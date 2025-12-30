@@ -249,6 +249,17 @@ body.gameBackground {
   cursor: pointer;
   box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 14px rgba(6, 16, 24, 0.24);
 }
+.difficultyOption.locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.difficultyLock {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-top: 4px;
+}
 .difficultyOption.selected {
   border-color: rgba(255, 224, 160, 0.8);
   background: linear-gradient(160deg, rgba(255, 239, 198, 0.92), rgba(255, 206, 130, 0.86) 55%, rgba(226, 140, 70, 0.92));
@@ -1385,6 +1396,28 @@ body.gameBackground {
 }
 .gameOverBest {
   font-weight: 800;
+}
+.crossScoreboard {
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(8, 18, 28, 0.45);
+  border: 1px solid rgba(255,255,255,0.12);
+  display: grid;
+  gap: 6px;
+}
+.crossScoreTitle {
+  font-weight: 800;
+  font-size: 13px;
+}
+.crossScoreList {
+  display: grid;
+  gap: 4px;
+}
+.crossScoreRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text);
 }
 .gameOverButtons {
   display: grid;

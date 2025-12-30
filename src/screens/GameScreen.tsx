@@ -3,12 +3,13 @@ import Board from "../components/Board";
 import Rack from "../components/Rack";
 import ScorePanel from "../components/ScorePanel";
 import { Difficulty, PlacedTile, Tile, GameState } from "../game/types";
-import { assistPlayerRack, createNewGame, rebalanceRack } from "../game/state";
+import { assistPlayerRack, createCrossGame, createNewGame, rebalanceRack } from "../game/state";
 import { applyRevealThisTurn, scoreTurn } from "../game/scoring";
 import { createTileBag, RACK_SIZE } from "../game/constants";
 import { chooseAiMove, findBestMoveForRack, findHintMove } from "../game/ai";
 import { validateMove, type WordPlay } from "../game/validation";
 import { recordGameResult, recordGameStart, recordMoveStats } from "../game/stats";
+import { recordCrossScore, type CrossScoreEntry } from "../game/crossScore";
 import { computeLevelProgress, computeXpGain } from "../progression/leveling";
 import { loadProgression, saveProgression } from "../progression/storage";
 import tileBase from "../assets/tile-base.png";
@@ -38,6 +39,7 @@ type HintCell = { x: number; y: number };
 
 type PowerUp = "auto" | "reveal" | "overdraw";
 type PowerUpMode = "reveal" | null;
+type GameMode = "standard" | "cross";
 
 type TurnScoreToast = { id: number; points: number; estimate: number; display: number; isLower: boolean };
 
@@ -75,6 +77,8 @@ type GameOverState = {
   levelBefore: number;
   levelAfter: number;
   totalXP: number;
+  mode: GameMode;
+  crossScores?: CrossScoreEntry[];
 };
 
 type SavedGameState = {
@@ -418,9 +422,12 @@ function pickHintWord(words: WordPlay[]) {
 }
 
 
-export default function GameScreen(props: { difficulty: Difficulty; audio: { ui: boolean; game: boolean }; onExit: () => void; onSettings: () => void; resume: boolean }) {
-  const savedState = props.resume ? loadSavedGame() : null;
-  const [game, setGame] = useState(() => savedState?.game ?? createNewGame(props.difficulty));
+export default function GameScreen(props: { difficulty: Difficulty; audio: { ui: boolean; game: boolean }; onExit: () => void; onSettings: () => void; resume: boolean; mode?: GameMode }) {
+  const mode = props.mode ?? "standard";
+  const isCross = mode === "cross";
+  const aiEnabled = !isCross;
+  const savedState = !isCross && props.resume ? loadSavedGame() : null;
+  const [game, setGame] = useState(() => savedState?.game ?? (isCross ? createCrossGame(props.difficulty) : createNewGame(props.difficulty)));
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [showHiddenHints, setShowHiddenHints] = useState(() => savedState?.showHiddenHints ?? false);
   const [turn, setTurn] = useState(() => savedState?.turn ?? 1);
@@ -752,7 +759,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (isCross || typeof window === "undefined") return;
     const snapshot: SavedGameState = {
       version: 1,
       game,
@@ -773,7 +780,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     } catch {
       // ignore write errors
     }
-  }, [game, turn, isPlayerTurn, scorelessTurns, passStreak, matchStats, moveHistory, swapsUsed, showHiddenHints, powerUpUsed, overdrawActive, playerReveals]);
+  }, [game, turn, isPlayerTurn, scorelessTurns, passStreak, matchStats, moveHistory, swapsUsed, showHiddenHints, powerUpUsed, overdrawActive, playerReveals, isCross]);
 
   useEffect(() => {
     matchStatsRef.current = matchStats;
@@ -977,22 +984,33 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   }
 
   function handleGameOver(nextGame: GameState, reason: string, stats: MatchStats, winner?: "You" | "AI" | "Tie") {
-    const finalWinner = winner ?? computeWinner(nextGame.scores);
+    const finalWinner = isCross ? "You" : winner ?? computeWinner(nextGame.scores);
     if (finalWinner === "You") playWinSound();
     if (finalWinner === "AI") playLoseSound();
 
-    const xpGained = computeXpGain({
-      win: finalWinner === "You",
-      wordsPlayed: stats.playerWords,
-      tilesPlaced: stats.playerTiles,
-      modifiersRevealed: playerRevealsRef.current,
-    });
+    const eligibleForXp = stats.playerWords >= 4;
+    const xpGained = eligibleForXp
+      ? computeXpGain({
+          win: finalWinner === "You",
+          wordsPlayed: stats.playerWords,
+          tilesPlaced: stats.playerTiles,
+          modifiersRevealed: playerRevealsRef.current,
+        })
+      : 0;
     const progression = loadProgression();
     const totalBefore = progression.totalXP;
     const levelBefore = computeLevelProgress(totalBefore).level;
     const totalXP = totalBefore + xpGained;
     saveProgression({ ...progression, totalXP });
     const levelAfter = computeLevelProgress(totalXP).level;
+
+    const crossScores = isCross
+      ? recordCrossScore({
+          score: nextGame.scores.player,
+          words: stats.playerWords,
+          tiles: stats.playerTiles,
+        })
+      : undefined;
 
     setGameOver({
       winner: finalWinner,
@@ -1003,6 +1021,8 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
       levelBefore,
       levelAfter,
       totalXP,
+      mode,
+      crossScores,
     });
     setPlayModal(null);
     setBlankPicker(null);
@@ -1013,12 +1033,14 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     setTouchDrag(null);
     dismissTurnScore();
     pendingTouchRef.current = null;
-    if (finalWinner === "You") recordGameResult("win");
-    if (finalWinner === "AI") recordGameResult("loss");
-    try {
-      localStorage.removeItem(SAVE_KEY);
-    } catch {
-      // ignore storage errors
+    if (!isCross) {
+      if (finalWinner === "You") recordGameResult("win");
+      if (finalWinner === "AI") recordGameResult("loss");
+      try {
+        localStorage.removeItem(SAVE_KEY);
+      } catch {
+        // ignore storage errors
+      }
     }
     aiQueuedRef.current = false;
     setAiBusy(false);
@@ -1042,7 +1064,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     }
     const bagEmpty = nextGame.bag.length === 0;
     const playerEmpty = nextGame.rack.length === 0;
-    const aiEmpty = nextGame.aiRack.length === 0;
+    const aiEmpty = aiEnabled ? nextGame.aiRack.length === 0 : false;
     if (bagEmpty && (playerEmpty || aiEmpty)) {
       const winner = playerEmpty && aiEmpty ? undefined : playerEmpty ? "You" : "AI";
       handleGameOver(nextGame, "Tile bag empty and rack emptied.", stats, winner);
@@ -1487,7 +1509,12 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     const nextPassStreak = updatePassStreak("You", false);
     if (checkGameOver(nextGame, scorelessRef.current, nextStats, nextPassStreak)) return;
     setTurn((t) => t + 1);
-    queueAiMove();
+    if (aiEnabled) {
+      setIsPlayerTurn(false);
+      queueAiMove();
+    } else {
+      setIsPlayerTurn(true);
+    }
   }
 
   
@@ -1522,6 +1549,12 @@ function openSubmitModal() {
   }
 
   function queueAiMove() {
+    if (!aiEnabled) {
+      setAiBusy(false);
+      setIsPlayerTurn(true);
+      aiQueuedRef.current = false;
+      return;
+    }
     if (gameOverRef.current) return;
     if (aiQueuedRef.current) return;
     aiQueuedRef.current = true;
@@ -1671,9 +1704,13 @@ function openSubmitModal() {
     const nextScoreless = updateScoreless(points);
     const nextPassStreak = updatePassStreak("You", false);
     if (checkGameOver(nextGame, nextScoreless, nextStats, nextPassStreak)) return;
-    showTurnScore(estimate, points, true);
-    setIsPlayerTurn(false);
+    showTurnScore(estimate, points, aiEnabled);
     setTurn((t) => t + 1);
+    if (aiEnabled) {
+      setIsPlayerTurn(false);
+    } else {
+      setIsPlayerTurn(true);
+    }
   }
 
   function commitTurn(words: WordPlay[], points: number, estimate: number) {
@@ -1715,9 +1752,13 @@ function openSubmitModal() {
     const nextScoreless = updateScoreless(points);
     const nextPassStreak = updatePassStreak("You", false);
     if (checkGameOver(nextGame, nextScoreless, nextStats, nextPassStreak)) return;
-    showTurnScore(estimate, points, true);
-    setIsPlayerTurn(false);
+    showTurnScore(estimate, points, aiEnabled);
     setTurn((t) => t + 1);
+    if (aiEnabled) {
+      setIsPlayerTurn(false);
+    } else {
+      setIsPlayerTurn(true);
+    }
   }
 
   function passTurn() {
@@ -1736,9 +1777,13 @@ function openSubmitModal() {
     const nextScoreless = updateScoreless(0);
     const nextPassStreak = updatePassStreak("You", true);
     if (checkGameOver(penalizedGame, nextScoreless, nextStats, nextPassStreak)) return;
-    setIsPlayerTurn(false);
     setTurn((t) => t + 1);
-    queueAiMove();
+    if (aiEnabled) {
+      setIsPlayerTurn(false);
+      queueAiMove();
+    } else {
+      setIsPlayerTurn(true);
+    }
   }
 
   function resignGame() {
@@ -1783,7 +1828,7 @@ function openSubmitModal() {
     passStreakRef.current = { ...EMPTY_PASS_STREAK };
     setSwapsUsed(0);
     recordGameStart();
-    setGame(createNewGame(props.difficulty));
+    setGame(isCross ? createCrossGame(props.difficulty) : createNewGame(props.difficulty));
   }
 
   return (
@@ -1807,7 +1852,7 @@ function openSubmitModal() {
 
           <div className="panelCard">
             <div className="panelTitle">Session</div>
-            <ScorePanel scores={game.scores} bagCount={game.bag.length} />
+            <ScorePanel scores={game.scores} bagCount={game.bag.length} showAi={!isCross} />
             <div className="small">Difficulty: {game.difficulty.toUpperCase()}</div>
             <div className="small">Board: 11x11 | Turn {turn}</div>
             <div className="small">{isPlayerTurn ? "Your move" : "AI move"}</div>
@@ -1850,16 +1895,20 @@ function openSubmitModal() {
               </div>
             </div>
             <div className="matchTitle">
-              Match
-              <span className="matchSub">{isPlayerTurn ? "Your turn" : "AI thinking"}</span>
+              {isCross ? "Cross Sweeper" : "Match"}
+              <span className="matchSub">
+                {isCross ? "Solo run" : isPlayerTurn ? "Your turn" : "AI thinking"}
+              </span>
             </div>
-            <div className="playerCard">
-              <div className="avatarCircle ai">AI</div>
-              <div>
-                <div className="playerName">Opponent</div>
-                <div className="playerScore">{game.scores.ai}</div>
+            {!isCross && (
+              <div className="playerCard">
+                <div className="avatarCircle ai">AI</div>
+                <div>
+                  <div className="playerName">Opponent</div>
+                  <div className="playerScore">{game.scores.ai}</div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="boardPanel">
@@ -2025,17 +2074,19 @@ function openSubmitModal() {
               </div>
             </div>
             <div className="mobileTurnInfo">
-              <div className="mobileTurnLabel">{isPlayerTurn ? "Your turn" : "AI thinking"}</div>
+              <div className="mobileTurnLabel">{isCross ? "Solo run" : isPlayerTurn ? "Your turn" : "AI thinking"}</div>
               <div className="mobileTurnCount">Turn {turn}</div>
               <div className="mobileDifficulty">{game.difficulty.toUpperCase()}</div>
             </div>
-            <div className="mobilePlayerBlock ai">
-              <div className="mobileAvatar ai">AI</div>
-              <div className="mobilePlayerMeta">
-                <div className="mobilePlayerName">AI</div>
-                <div className="mobilePlayerScore">{game.scores.ai}</div>
+            {!isCross && (
+              <div className="mobilePlayerBlock ai">
+                <div className="mobileAvatar ai">AI</div>
+                <div className="mobilePlayerMeta">
+                  <div className="mobilePlayerName">AI</div>
+                  <div className="mobilePlayerScore">{game.scores.ai}</div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <button
@@ -2192,7 +2243,9 @@ function openSubmitModal() {
         <div className="gameOverOverlay">
           <div className="gameOverCard">
             <div className="gameOverTitle">
-              {gameOver.winner === "Tie"
+              {isCross
+                ? "Cross Sweeper Complete"
+                : gameOver.winner === "Tie"
                 ? "Tie Game"
                 : gameOver.winner === "You"
                 ? "You Win!"
@@ -2200,8 +2253,8 @@ function openSubmitModal() {
             </div>
             <div className="gameOverReason">{gameOver.reason}</div>
             <div className="gameOverScoreLine">
-              <span>You {gameOver.scores.player}</span>
-              <span>AI {gameOver.scores.ai}</span>
+              <span>{isCross ? "Score" : "You"} {gameOver.scores.player}</span>
+              {!isCross && <span>AI {gameOver.scores.ai}</span>}
             </div>
             <div className="gameOverXp">
               <div className="xpGain">+{gameOver.xpGained} XP</div>
@@ -2220,15 +2273,30 @@ function openSubmitModal() {
                 <div className="gameOverStat">Tiles {gameOver.stats.playerTiles}</div>
                 <div className="gameOverStat">Points {gameOver.stats.playerPoints}</div>
               </div>
-              <div className="gameOverBlock">
-                <div className="gameOverBlockTitle">AI</div>
-                <div className="gameOverStat">Moves {gameOver.stats.aiMoves}</div>
-                <div className="gameOverStat">Words {gameOver.stats.aiWords}</div>
-                <div className="gameOverStat">Tiles {gameOver.stats.aiTiles}</div>
-                <div className="gameOverStat">Points {gameOver.stats.aiPoints}</div>
-              </div>
+              {!isCross && (
+                <div className="gameOverBlock">
+                  <div className="gameOverBlockTitle">AI</div>
+                  <div className="gameOverStat">Moves {gameOver.stats.aiMoves}</div>
+                  <div className="gameOverStat">Words {gameOver.stats.aiWords}</div>
+                  <div className="gameOverStat">Tiles {gameOver.stats.aiTiles}</div>
+                  <div className="gameOverStat">Points {gameOver.stats.aiPoints}</div>
+                </div>
+              )}
             </div>
             <div className="gameOverBest">Best move: {gameOver.stats.bestMove}</div>
+            {isCross && gameOver.crossScores && gameOver.crossScores.length > 0 && (
+              <div className="crossScoreboard">
+                <div className="crossScoreTitle">Cross Sweeper Scores</div>
+                <div className="crossScoreList">
+                  {gameOver.crossScores.slice(0, 5).map((entry, idx) => (
+                    <div key={entry.id} className="crossScoreRow">
+                      <span>#{idx + 1}</span>
+                      <span>{entry.score} pts</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="gameOverButtons">
               <button type="button" className="confirmBtn primary" onClick={newMatch}>
                 Play Again

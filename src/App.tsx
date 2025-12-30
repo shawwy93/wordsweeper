@@ -7,7 +7,7 @@ import StatsScreen from "./screens/StatsScreen";
 import { Difficulty } from "./game/types";
 import backgroundAudioSrc from "./assets/audio/backgroundAudio.mp3";
 
-type Screen = "menu" | "game" | "how" | "settings" | "stats";
+type Screen = "menu" | "game" | "cross" | "how" | "settings" | "stats";
 type AudioSettings = { ui: boolean; game: boolean };
 type MusicSettings = { muted: boolean; volume: number };
 
@@ -127,6 +127,12 @@ export default function App() {
     setScreen("game");
   }
 
+  function startCrossGame() {
+    setHasSavedGame(Boolean(localStorage.getItem("hh_saved_game")));
+    setResumeGame(false);
+    setScreen("cross");
+  }
+
   function resumeSavedGame() {
     setResumeGame(true);
     setScreen("game");
@@ -166,6 +172,7 @@ export default function App() {
       {screen === "menu" && (
         <MenuScreen
           onPlay={startNewGame}
+          onCross={startCrossGame}
           onResume={resumeSavedGame}
           onHow={() => setScreen("how")}
           onSettings={() => openSettings("menu")}
@@ -184,6 +191,17 @@ export default function App() {
           onExit={exitToMenu}
           onSettings={() => openSettings("game")}
           resume={resumeGame}
+        />
+      )}
+
+      {screen === "cross" && (
+        <GameScreen
+          difficulty={settings.difficulty}
+          audio={settings.audio}
+          onExit={exitToMenu}
+          onSettings={() => openSettings("cross")}
+          resume={false}
+          mode="cross"
         />
       )}
 

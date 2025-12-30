@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+﻿import { useRef, useState } from "react";
 import type { Difficulty } from "../game/types";
 import { computeLevelProgress } from "../progression/leveling";
 import { loadProgression } from "../progression/storage";
@@ -7,6 +7,7 @@ import playAudioSrc from "../assets/audio/playAudio.mp3";
 
 export default function MenuScreen(props: {
   onPlay: () => void;
+  onCross: () => void;
   onResume: () => void;
   onHow: () => void;
   onSettings: () => void;
@@ -19,6 +20,8 @@ export default function MenuScreen(props: {
   const [showDifficulty, setShowDifficulty] = useState(false);
   const progression = loadProgression();
   const levelInfo = computeLevelProgress(progression.totalXP);
+  const normalLocked = levelInfo.level < 5;
+  const hardLocked = levelInfo.level < 10;
   const audioRef = useRef<{
     play: HTMLAudioElement;
     button: HTMLAudioElement;
@@ -66,6 +69,9 @@ export default function MenuScreen(props: {
   }
 
   function handlePick(d: Difficulty) {
+    if ((d === "normal" && normalLocked) || (d === "hard" && hardLocked)) {
+      return;
+    }
     playButtonSound();
     props.setDifficulty(d);
     setShowDifficulty(false);
@@ -87,6 +93,21 @@ export default function MenuScreen(props: {
     props.onSettings();
   }
 
+  function handleCross() {
+    playButtonSound();
+    let nextDifficulty: Difficulty = props.difficulty;
+    if (nextDifficulty === "hard" && hardLocked) {
+      nextDifficulty = normalLocked ? "easy" : "normal";
+    }
+    if (nextDifficulty === "normal" && normalLocked) {
+      nextDifficulty = "easy";
+    }
+    if (nextDifficulty !== props.difficulty) {
+      props.setDifficulty(nextDifficulty);
+    }
+    props.onCross();
+  }
+
   return (
     <div className="screen screenMenu">
       <div className="menuLayout">
@@ -103,6 +124,9 @@ export default function MenuScreen(props: {
           </div>
           <button className="menuAction primary" type="button" onClick={handlePlayClick}>
             Play
+          </button>
+          <button className="menuAction" type="button" onClick={handleCross}>
+            Cross Sweeper
           </button>
           {props.hasSavedGame && (
             <button className="menuAction" type="button" onClick={handleResume}>
@@ -137,17 +161,21 @@ export default function MenuScreen(props: {
               </button>
               <button
                 type="button"
-                className={"difficultyOption" + (props.difficulty === "normal" ? " selected" : "")}
+                className={"difficultyOption" + (props.difficulty === "normal" ? " selected" : "") + (normalLocked ? " locked" : "")}
                 onClick={() => handlePick("normal")}
+                disabled={normalLocked}
               >
                 Normal
+                {normalLocked && <span className="difficultyLock">Unlocks at level 5</span>}
               </button>
               <button
                 type="button"
-                className={"difficultyOption" + (props.difficulty === "hard" ? " selected" : "")}
+                className={"difficultyOption" + (props.difficulty === "hard" ? " selected" : "") + (hardLocked ? " locked" : "")}
                 onClick={() => handlePick("hard")}
+                disabled={hardLocked}
               >
                 Hard
+                {hardLocked && <span className="difficultyLock">Unlocks at level 10</span>}
               </button>
             </div>
             <button type="button" className="difficultyCancel" onClick={handleClosePicker}>
@@ -159,3 +187,4 @@ export default function MenuScreen(props: {
     </div>
   );
 }
+

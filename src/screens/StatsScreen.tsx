@@ -3,11 +3,13 @@ import TopBar from "../components/TopBar";
 import { computeLevelProgress } from "../progression/leveling";
 import { loadProgression } from "../progression/storage";
 import { loadStats, resetStats } from "../game/stats";
+import { loadCrossScores } from "../game/crossScore";
 
 export default function StatsScreen(props: { onBack: () => void }) {
   const s = loadStats();
   const progression = loadProgression();
   const levelInfo = computeLevelProgress(progression.totalXP);
+  const crossScores = loadCrossScores();
 
   function handleReset() {
     resetStats();
@@ -72,6 +74,22 @@ export default function StatsScreen(props: { onBack: () => void }) {
               <div className="kv">Best move</div>
               <div className="vv">{s.highestMove}</div>
             </div>
+          </div>
+
+          <div style={{ marginTop: 12 }} className="scorePanel card">
+            <div className="panelTitle">Cross Sweeper Scores</div>
+            {crossScores.length === 0 ? (
+              <div className="small" style={{ paddingTop: 6 }}>No scores yet.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                {crossScores.map((entry, idx) => (
+                  <div key={entry.id} className="scoreRow">
+                    <div className="kv">#{idx + 1}</div>
+                    <div className="vv">{entry.score} pts</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={{ height: 16 }} />
