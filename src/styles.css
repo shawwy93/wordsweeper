@@ -124,7 +124,7 @@ body.gameBackground {
   padding: 0 clamp(12px, 6vw, 90px) clamp(-100px, 4vh, 190px);
 }
 .menuLogo {
-  width: min(380px, 70vw);
+  width: min(570px, 90vw);
   margin: 0 auto 10px;
   display: block;
   filter: drop-shadow(0 12px 22px rgba(8, 18, 26, 0.45));
@@ -326,7 +326,8 @@ body.gameBackground {
 
 .btn {
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  touch-action: none;
+  overscroll-behavior: contain;
   width: 100%;
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: 14px;
@@ -772,7 +773,8 @@ body.gameBackground {
   grid-auto-rows: 1fr;
   gap: 0;
   user-select: none;
-  touch-action: manipulation;
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .square {
@@ -2501,6 +2503,9 @@ body.gameBackground {
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
 }
+
+
+
 
 
 

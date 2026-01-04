@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import Board from "../components/Board";
 import Rack from "../components/Rack";
 import ScorePanel from "../components/ScorePanel";
@@ -471,6 +471,9 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
   const scoreToastAnimRef = useRef<number | null>(null);
   const pendingAiAfterScoreRef = useRef(false);
   const turnScoreRef = useRef<TurnScoreToast | null>(null);
+  const onTapSquareRef = useRef<(x: number, y: number) => void>(() => undefined);
+  const onBoardDropRef = useRef<(tileId: string, source: "rack" | "board", x: number, y: number) => void>(() => undefined);
+  const beginTouchDragRef = useRef<(tileId: string, source: "rack" | "board", event: ReactPointerEvent<HTMLDivElement>) => void>(() => undefined);
 
   const audioRef = useRef<{
     place: HTMLAudioElement;
@@ -1460,6 +1463,34 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     if (!selectedTileId) return;
     placeTileAt(selectedTileId, x, y);
   }
+  onTapSquareRef.current = onTapSquare;
+  onBoardDropRef.current = onBoardDrop;
+  beginTouchDragRef.current = beginTouchDrag;
+
+  const handleTapSquare = useCallback((x: number, y: number) => {
+    onTapSquareRef.current?.(x, y);
+  }, []);
+
+  const handleBoardDrop = useCallback(
+    (tileId: string, source: "rack" | "board", x: number, y: number) => {
+      onBoardDropRef.current?.(tileId, source, x, y);
+    },
+    []
+  );
+
+  const handleBoardTilePointerDown = useCallback(
+    (tileId: string, event: ReactPointerEvent<HTMLDivElement>) => {
+      beginTouchDragRef.current?.(tileId, "board", event);
+    },
+    []
+  );
+
+  const handleRackTilePointerDown = useCallback(
+    (tileId: string, event: ReactPointerEvent<HTMLDivElement>) => {
+      beginTouchDragRef.current?.(tileId, "rack", event);
+    },
+    []
+  );
 
   function confirmBlankLetter(letter: string) {
     if (!blankPicker) return;
@@ -1989,11 +2020,11 @@ function openSubmitModal() {
                   lastRevealAnim={game.lastRevealAnim}
                   lastPlayedIds={game.lastPlayedIds}
                   hintCells={hintCells}
-                  onTapSquare={onTapSquare}
+                  onTapSquare={handleTapSquare}
                   showHiddenHints={showHiddenHints}
                   canDrag={canInteract}
-                  onDropTile={onBoardDrop}
-                  onTilePointerDown={(tileId, event) => beginTouchDrag(tileId, "board", event)}
+                  onDropTile={handleBoardDrop}
+                  onTilePointerDown={handleBoardTilePointerDown}
                 />
               </div>
             </div>
@@ -2023,7 +2054,7 @@ function openSubmitModal() {
                 onSelect={onSelectRackTile}
                 draggable={canInteract}
                 onTileDragStart={onRackDragStart}
-                onTilePointerDown={(tileId, event) => beginTouchDrag(tileId, "rack", event)}
+                onTilePointerDown={handleRackTilePointerDown}
                 onTileSwapDrop={swapRackTiles}
                 onDropTile={onRackDrop}
               />
@@ -2161,11 +2192,11 @@ function openSubmitModal() {
               lastRevealAnim={game.lastRevealAnim}
               lastPlayedIds={game.lastPlayedIds}
               hintCells={hintCells}
-              onTapSquare={onTapSquare}
+              onTapSquare={handleTapSquare}
               showHiddenHints={showHiddenHints}
               canDrag={canInteract}
-              onDropTile={onBoardDrop}
-              onTilePointerDown={(tileId, event) => beginTouchDrag(tileId, "board", event)}
+              onDropTile={handleBoardDrop}
+              onTilePointerDown={handleBoardTilePointerDown}
             />
           </div>
         </div>
@@ -2191,7 +2222,7 @@ function openSubmitModal() {
             onSelect={onSelectRackTile}
             draggable={canInteract}
             onTileDragStart={onRackDragStart}
-            onTilePointerDown={(tileId, event) => beginTouchDrag(tileId, "rack", event)}
+            onTilePointerDown={handleRackTilePointerDown}
             onTileSwapDrop={swapRackTiles}
             onDropTile={onRackDrop}
           />
@@ -2572,6 +2603,8 @@ function openSubmitModal() {
     </div>
   );
 }
+
+
 
 
 

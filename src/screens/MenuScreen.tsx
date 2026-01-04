@@ -20,6 +20,8 @@ export default function MenuScreen(props: {
   hasSavedGame: boolean;
 }) {
   const [showDifficulty, setShowDifficulty] = useState(false);
+  const [showModePicker, setShowModePicker] = useState(false);
+  const [pendingMode, setPendingMode] = useState<"standard" | "cross" | null>(null);
   const progression = loadProgression();
   const levelInfo = computeLevelProgress(progression.totalXP);
   const normalLocked = levelInfo.level < 5;
@@ -62,7 +64,7 @@ export default function MenuScreen(props: {
 
   function handlePlayClick() {
     playPlaySound();
-    setShowDifficulty(true);
+    setShowModePicker(true);
   }
 
   function handleResume() {
@@ -77,12 +79,19 @@ export default function MenuScreen(props: {
     playButtonSound();
     props.setDifficulty(d);
     setShowDifficulty(false);
+    const mode = pendingMode ?? "standard";
+    setPendingMode(null);
+    if (mode === "cross") {
+      startCross();
+      return;
+    }
     props.onPlay();
   }
 
   function handleClosePicker() {
     playButtonSound();
     setShowDifficulty(false);
+    setPendingMode(null);
   }
 
   function handleStats() {
@@ -95,23 +104,29 @@ export default function MenuScreen(props: {
     props.onSettings();
   }
 
-  function handleWordle() {
+  function handleCloseModePicker() {
     playButtonSound();
+    setShowModePicker(false);
+    setPendingMode(null);
+  }
+
+  function startCross() {
+    props.onCross();
+  }
+
+  function startWordle() {
     props.onWordle();
   }
-  function handleCross() {
+
+  function handleModePick(mode: "standard" | "cross" | "wordle") {
     playButtonSound();
-    let nextDifficulty: Difficulty = props.difficulty;
-    if (nextDifficulty === "hard" && hardLocked) {
-      nextDifficulty = normalLocked ? "easy" : "normal";
+    setShowModePicker(false);
+    if (mode === "wordle") {
+      startWordle();
+      return;
     }
-    if (nextDifficulty === "normal" && normalLocked) {
-      nextDifficulty = "easy";
-    }
-    if (nextDifficulty !== props.difficulty) {
-      props.setDifficulty(nextDifficulty);
-    }
-    props.onCross();
+    setPendingMode(mode);
+    setShowDifficulty(true);
   }
 
   return (
@@ -132,12 +147,6 @@ export default function MenuScreen(props: {
           <button className="menuAction primary" type="button" onClick={handlePlayClick}>
             Play
           </button>
-          <button className="menuAction" type="button" onClick={handleCross}>
-            Cross Sweeper
-          </button>
-          <button className="menuAction" type="button" onClick={handleWordle}>
-            Word Sweeple
-          </button>
           {props.hasSavedGame && (
             <button className="menuAction" type="button" onClick={handleResume}>
               Resume
@@ -156,6 +165,28 @@ export default function MenuScreen(props: {
           </a>
         </div>
       </div>
+
+      {showModePicker && (
+        <div className="difficultyOverlay" onClick={handleCloseModePicker}>
+          <div className="difficultyCard" onClick={(event) => event.stopPropagation()}>
+            <div className="difficultyTitle">Choose mode</div>
+            <div className="difficultyButtons">
+              <button type="button" className="difficultyOption" onClick={() => handleModePick("standard")}>
+                Word Sweeper
+              </button>
+              <button type="button" className="difficultyOption" onClick={() => handleModePick("cross")}>
+                Cross Sweeper
+              </button>
+              <button type="button" className="difficultyOption" onClick={() => handleModePick("wordle")}>
+                Word Sweeple
+              </button>
+            </div>
+            <button type="button" className="difficultyCancel" onClick={handleCloseModePicker}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {showDifficulty && (
         <div className="difficultyOverlay" onClick={handleClosePicker}>
@@ -197,11 +228,3 @@ export default function MenuScreen(props: {
     </div>
   );
 }
-
-
-
-
-
-
-
-

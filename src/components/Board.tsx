@@ -1,5 +1,5 @@
 import { BoardCell, PlacedTile, Tile as TileType } from "../game/types";
-import type { PointerEvent } from "react";
+import { memo, type PointerEvent } from "react";
 import tileBase from "../assets/tile-base.png";
 import tileBaseLast from "../assets/tile-baseLast.png";
 import tileBaseGood from "../assets/tile-baseGood.png";
@@ -17,7 +17,7 @@ function modLabel(mod: BoardCell["modifier"]) {
   }
 }
 
-export default function Board(props: {
+const Board = memo(function Board(props: {
   board: BoardCell[][];
   tilesById: Record<string, TileType>;
   placedThisTurn: PlacedTile[];
@@ -154,4 +154,6 @@ export default function Board(props: {
       )}
     </div>
   );
-}
+});
+
+export default Board;
