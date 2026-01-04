@@ -1,4 +1,4 @@
-﻿import { DICTIONARY } from "./dictionary";
+﻿import { DICTIONARY, isWord } from "./dictionary";
 import { BOARD_SIZE, LETTER_VALUES } from "./constants";
 import { BoardCell, Tile } from "./types";
 
@@ -75,6 +75,7 @@ function canPlaceWord(
   y: number,
   horizontal: boolean
 ) {
+
   const size = board.length;
   if (horizontal) {
     if (x + word.length > size) return false;
@@ -90,6 +91,54 @@ function canPlaceWord(
     if (cell.tileId) {
       const existing = tilesById[cell.tileId];
       if (!existing || existing.letter !== word[i]) return false;
+    }
+  }
+
+  return true;
+}
+
+function letterAt(board: BoardCell[][], tilesById: Record<string, Tile>, x: number, y: number) {
+  const id = board[y]?.[x]?.tileId;
+  if (!id) return "";
+  return tilesById[id]?.letter ?? "";
+}
+
+function areBoardWordsValid(board: BoardCell[][], tilesById: Record<string, Tile>) {
+  const size = board.length;
+
+  for (let y = 0; y < size; y++) {
+    let x = 0;
+    while (x < size) {
+      if (!board[y]?.[x]?.tileId) {
+        x += 1;
+        continue;
+      }
+      let word = "";
+      let length = 0;
+      while (x < size && board[y]?.[x]?.tileId) {
+        word += letterAt(board, tilesById, x, y);
+        length += 1;
+        x += 1;
+      }
+      if (length >= 2 && !isWord(word)) return false;
+    }
+  }
+
+  for (let x = 0; x < size; x++) {
+    let y = 0;
+    while (y < size) {
+      if (!board[y]?.[x]?.tileId) {
+        y += 1;
+        continue;
+      }
+      let word = "";
+      let length = 0;
+      while (y < size && board[y]?.[x]?.tileId) {
+        word += letterAt(board, tilesById, x, y);
+        length += 1;
+        y += 1;
+      }
+      if (length >= 2 && !isWord(word)) return false;
     }
   }
 
@@ -149,7 +198,16 @@ export function seedCrossWords(board: BoardCell[][], tilesById: Record<string, T
       const y = Math.floor(Math.random() * (maxY + 1));
 
       if (!canPlaceWord(board, tilesById, word, x, y, horizontal)) continue;
+
+      const boardCopy = board.map((row) => row.map((cell) => ({ ...cell })));
+      const tilesCopy = { ...tilesById };
+      const nextIdPreview = placeWord(boardCopy, tilesCopy, word, x, y, horizontal, nextId);
+      if (!areBoardWordsValid(boardCopy, tilesCopy)) continue;
+
       nextId = placeWord(board, tilesById, word, x, y, horizontal, nextId);
+      if (nextId !== nextIdPreview) {
+        nextId = nextIdPreview;
+      }
       placed.push(word);
       placedWord = true;
       break;

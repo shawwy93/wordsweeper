@@ -1,7 +1,7 @@
 import { BOARD_SIZE, CENTER } from "./constants";
 import { DICTIONARY, isWord } from "./dictionary";
 import { GameState, PlacedTile, Tile } from "./types";
-import { validateMove, WordPlay } from "./validation";
+import { validateMove, type WordPlay, type ValidationOptions } from "./validation";
 
 type TrieNode = {
   children: Record<string, TrieNode>;
@@ -269,12 +269,12 @@ function chooseEasy(moves: AiMove[]) {
 }
 
 
-export function findBestMoveForRack(g: GameState, rack: Tile[]) {
+export function findBestMoveForRack(g: GameState, rack: Tile[], options?: ValidationOptions) {
   const snapshot: GameState = { ...g, aiRack: rack, difficulty: "hard" };
-  return chooseAiMove(snapshot);
+  return chooseAiMove(snapshot, options);
 }
 
-export function chooseAiMove(g: GameState): AiMove | null {
+export function chooseAiMove(g: GameState, options?: ValidationOptions): AiMove | null {
   if (g.aiRack.length === 0) return null;
 
   let anchors = getAnchors(g);
@@ -318,7 +318,7 @@ export function chooseAiMove(g: GameState): AiMove | null {
     }
     const sim = simulatePlacement(g, placements);
     if (!sim) return;
-    const result = validateMove(sim);
+    const result = validateMove(sim, options);
     if (!result.ok) return;
     const score = scoreWithRevealed(sim, result.words);
     let evilHits = 0;
@@ -463,15 +463,15 @@ export function chooseAiMove(g: GameState): AiMove | null {
 }
 
 
-export function findHintMove(g: GameState): AiMove | null {
+export function findHintMove(g: GameState, options?: ValidationOptions): AiMove | null {
   const base: GameState = {
     ...g,
     aiRack: g.rack,
     placedThisTurn: [],
   };
-  const easy = chooseAiMove({ ...base, difficulty: "easy" });
+  const easy = chooseAiMove({ ...base, difficulty: "easy" }, options);
   if (easy) return easy;
-  const normal = chooseAiMove({ ...base, difficulty: "normal" });
+  const normal = chooseAiMove({ ...base, difficulty: "normal" }, options);
   if (normal) return normal;
-  return chooseAiMove({ ...base, difficulty: "hard" });
+  return chooseAiMove({ ...base, difficulty: "hard" }, options);
 }

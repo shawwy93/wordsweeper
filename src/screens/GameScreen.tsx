@@ -427,6 +427,7 @@ function pickHintWord(words: WordPlay[]) {
 export default function GameScreen(props: { difficulty: Difficulty; audio: { ui: boolean; game: boolean }; onExit: () => void; onSettings: () => void; resume: boolean; mode?: GameMode }) {
   const mode = props.mode ?? "standard";
   const isCross = mode === "cross";
+  const validationOptions = isCross ? { requireAllWords: true } : undefined;
   const aiEnabled = !isCross;
   const saveKey = isCross ? CROSS_SAVE_KEY : SAVE_KEY;
   const savedState = props.resume ? loadSavedGame(saveKey) : null;
@@ -623,7 +624,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     const current = gameRef.current;
     if (!current) return;
     setShowPowerUps(false);
-    const move = findBestMoveForRack(current, current.rack);
+    const move = findBestMoveForRack(current, current.rack, validationOptions);
     setPowerUpUsed("auto");
     if (!move) {
       passTurn();
@@ -634,7 +635,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
       passTurn();
       return;
     }
-    const validation = validateMove(sim);
+    const validation = validateMove(sim, validationOptions);
     if (!validation.ok) {
       passTurn();
       return;
@@ -725,7 +726,7 @@ export default function GameScreen(props: { difficulty: Difficulty; audio: { ui:
     playButtonSound();
     const current = gameRef.current;
     if (!current) return;
-    const move = findHintMove(current);
+    const move = findHintMove(current, validationOptions);
     if (!move) {
       setHintCells([]);
       return;
@@ -1611,7 +1612,7 @@ function confirmPlay() {
 
 function openSubmitModal() {
     if (!canInteract) return;
-    const result = validateMove(game);
+    const result = validateMove(game, validationOptions);
     if (!result.ok) {
       setPlayModal({ type: "invalid", reason: result.reason, words: result.words ?? [] });
       return;
@@ -1650,7 +1651,7 @@ function openSubmitModal() {
         return;
       }
 
-      const move = chooseAiMove(current);
+      const move = chooseAiMove(current, validationOptions);
       if (!move) {
         const nextGame = { ...current, placedThisTurn: [], lastPlayedIds: [] };
         setGame(nextGame);
@@ -1686,7 +1687,7 @@ function openSubmitModal() {
         return;
       }
 
-      const validation = validateMove(sim);
+      const validation = validateMove(sim, validationOptions);
       if (!validation.ok) {
         const nextGame = { ...current, placedThisTurn: [], lastPlayedIds: [] };
         setGame(nextGame);

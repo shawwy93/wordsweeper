@@ -10,6 +10,8 @@ import {
   pickWordleTarget,
   type LetterState,
 } from "../game/wordle";
+import { computeLevelProgress, computeXpGain } from "../progression/leveling";
+import { loadProgression, saveProgression } from "../progression/storage";
 import tileBase from "../assets/tile-base.png";
 
 const KEYBOARD_ROWS = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
@@ -21,6 +23,13 @@ type GuessResult = {
 };
 
 type Toast = { text: string; tone: "danger" | "info" };
+
+type XpSummary = {
+  xpGained: number;
+  levelBefore: number;
+  levelAfter: number;
+  totalXP: number;
+};
 
 type Props = {
   onExit: () => void;
@@ -49,6 +58,7 @@ export default function WordleScreen(props: Props) {
   const [attemptsLeft, setAttemptsLeft] = useState(WORDLE_ATTEMPTS);
   const [status, setStatus] = useState<"playing" | "won" | "lost">("playing");
   const [toast, setToast] = useState<Toast | null>(null);
+  const [xpSummary, setXpSummary] = useState<XpSummary | null>(null);
 
   const evilSet = useMemo(() => new Set(evilPositions), [evilPositions]);
   const letterStates = useMemo(() => buildLetterStates(guesses), [guesses]);
@@ -64,6 +74,33 @@ export default function WordleScreen(props: Props) {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => {
+    if (status === "playing") {
+      setXpSummary(null);
+      return;
+    }
+    if (xpSummary) return;
+    const wordsPlayed = guesses.length;
+    const tilesPlaced = guesses.reduce((sum, guess) => sum + guess.word.length, 0);
+    const modifiersRevealed = evilRevealed.size;
+    const eligibleForXp = wordsPlayed >= 4;
+    const xpGained = eligibleForXp
+      ? computeXpGain({
+          win: status === "won",
+          wordsPlayed,
+          tilesPlaced,
+          modifiersRevealed,
+        })
+      : 0;
+    const progression = loadProgression();
+    const totalBefore = progression.totalXP;
+    const levelBefore = computeLevelProgress(totalBefore).level;
+    const totalXP = totalBefore + xpGained;
+    saveProgression({ ...progression, totalXP });
+    const levelAfter = computeLevelProgress(totalXP).level;
+    setXpSummary({ xpGained, levelBefore, levelAfter, totalXP });
+  }, [status, guesses, evilRevealed, xpSummary]);
+
   function resetGame() {
     setTargetWord(pickWordleTarget());
     setEvilPositions(pickEvilPositions());
@@ -73,6 +110,7 @@ export default function WordleScreen(props: Props) {
     setAttemptsLeft(WORDLE_ATTEMPTS);
     setStatus("playing");
     setToast(null);
+    setXpSummary(null);
   }
 
   function showToast(text: string, tone: Toast["tone"] = "info") {
@@ -262,6 +300,17 @@ export default function WordleScreen(props: Props) {
             <div className="wordleResultCard">
               <div className="wordleResultTitle">{status === "won" ? "You guessed it!" : "Out of attempts"}</div>
               <div className="wordleResultWord">Word: {targetWord}</div>
+              {xpSummary && (
+                <div className="gameOverXp">
+                  <div className="xpGain">+{xpSummary.xpGained} XP</div>
+                  <div className={"xpLevel" + (xpSummary.levelAfter > xpSummary.levelBefore ? " levelUp" : "")}>
+                    {xpSummary.levelAfter > xpSummary.levelBefore
+                      ? `Level Up! ${xpSummary.levelBefore} -> ${xpSummary.levelAfter}`
+                      : `Level ${xpSummary.levelAfter}`}
+                  </div>
+                  <div className="xpTotal">Total XP: {xpSummary.totalXP}</div>
+                </div>
+              )}
               <div className="wordleResultActions">
                 <button type="button" className="confirmBtn primary" onClick={resetGame}>
                   Play Again

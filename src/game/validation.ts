@@ -11,6 +11,10 @@ export type ValidationResult =
   | { ok: true; words: WordPlay[] }
   | { ok: false; reason: string; words?: WordPlay[] };
 
+export type ValidationOptions = {
+  requireAllWords?: boolean;
+};
+
 function key(x: number, y: number) {
   return `${x},${y}`;
 }
@@ -47,6 +51,50 @@ function buildLineWord(
   return { text, cells };
 }
 
+function collectBoardWords(g: GameState) {
+  const words: WordPlay[] = [];
+  const size = g.board.length;
+  const seen = new Set<string>();
+
+  function addWord(word: WordPlay | null) {
+    if (!word || word.text.length < 2) return;
+    const wordKey = word.cells.map((c) => key(c.x, c.y)).join("|");
+    if (seen.has(wordKey)) return;
+    seen.add(wordKey);
+    words.push(word);
+  }
+
+  for (let y = 0; y < size; y++) {
+    let x = 0;
+    while (x < size) {
+      if (!tileIdAt(g, x, y)) {
+        x += 1;
+        continue;
+      }
+      const start = x;
+      while (x < size && tileIdAt(g, x, y)) x += 1;
+      const end = x - 1;
+      addWord(buildLineWord(g, y, start, end, true));
+    }
+  }
+
+  for (let x = 0; x < size; x++) {
+    let y = 0;
+    while (y < size) {
+      if (!tileIdAt(g, x, y)) {
+        y += 1;
+        continue;
+      }
+      const start = y;
+      while (y < size && tileIdAt(g, x, y)) y += 1;
+      const end = y - 1;
+      addWord(buildLineWord(g, x, start, end, false));
+    }
+  }
+
+  return words;
+}
+
 function buildCrossWord(g: GameState, x: number, y: number, horizontal: boolean) {
   let start = horizontal ? y : x;
   let end = horizontal ? y : x;
@@ -71,7 +119,7 @@ function buildCrossWord(g: GameState, x: number, y: number, horizontal: boolean)
   return word;
 }
 
-export function validateMove(g: GameState): ValidationResult {
+export function validateMove(g: GameState, options?: ValidationOptions): ValidationResult {
   if (g.placedThisTurn.length === 0) {
     return { ok: false, reason: "Place at least one tile before submitting." };
   }
@@ -177,6 +225,15 @@ export function validateMove(g: GameState): ValidationResult {
   for (const word of words) {
     if (!isWord(word.text)) {
       return { ok: false, reason: `Not in dictionary: ${word.text}`, words: [word] };
+    }
+  }
+
+  if (options?.requireAllWords) {
+    const allWords = collectBoardWords(g);
+    for (const word of allWords) {
+      if (!isWord(word.text)) {
+        return { ok: false, reason: `Not in dictionary: ${word.text}`, words: [word] };
+      }
     }
   }
 
